@@ -1,0 +1,32 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "umi dev",
+    "build": "umi build",
+    "lint": "eslint .",
+    "preview": "umi preview"
+  },
+  "dependencies": {
+    "@umijs/max": "^4.3.0",
+    "antd": "^5.21.6",
+    "axios": "^1.7.7",
+    "dayjs": "^1.11.13",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.15.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.5.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.58.2"
+  }
+}

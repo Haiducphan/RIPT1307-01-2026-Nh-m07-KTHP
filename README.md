@@ -12,6 +12,55 @@ Du an web cho phep sinh vien/cau lac bo dang ky muon thiet bi, quan tri vien duy
 - API: frontend goi backend Node.js/Express qua `/api`, backend dang co mock data de demo truoc khi noi database that
 - Deploy frontend: Netlify
 
+## Huong dan setup va chay
+
+### 1. Clone va cai dat dependencies
+
+```bash
+# Clone repository
+git clone <your-repo-url>
+cd DA\ WEB
+
+# Cai dat server
+cd server
+npm install
+
+# Cai dat client (terminal moi)
+cd client
+npm install
+```
+
+### 2. Setup environment variables
+
+```bash
+# Server
+cd server
+cp .env.example .env
+# Cap nhat .env voi thong tin database va email
+
+# Client
+cd client
+cp .env.example .env
+# Neu can thay doi API_BASE_URL
+```
+
+### 3. Chay ung dung
+
+```bash
+# Terminal 1 - Server (port 4000)
+cd server
+npm run dev
+
+# Terminal 2 - Client (port 8000 hoac 8001)
+cd client
+npm run dev
+```
+
+### 4. Truy cap
+
+- **Frontend**: http://localhost:8000 (hoac 8001)
+- **Backend API**: http://localhost:4000/api
+
 ## Cau truc thu muc
 
 ```txt

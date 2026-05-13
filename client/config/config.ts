@@ -4,6 +4,7 @@ import routes from './routes';
 export default defineConfig({
   routes,
   npmClient: 'npm',
+  mfsu: false,
   proxy: {
     '/api': {
       target: 'http://localhost:4000',

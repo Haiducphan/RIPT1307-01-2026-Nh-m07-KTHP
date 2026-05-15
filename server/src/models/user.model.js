@@ -5,22 +5,28 @@ const User = sequelize.define(
   'User',
   {
     id: {
-      type: DataTypes.STRING,
-      primaryKey: true
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
     },
     email: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: false,
+      unique: true
     },
     password: {
       type: DataTypes.STRING,
       allowNull: false
     },
     role: {
-      type: DataTypes.STRING
+      type: DataTypes.ENUM('student', 'admin'),
+      allowNull: false,
+      defaultValue: 'student'
     },
-    fullName: {
-      type: DataTypes.STRING
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
     }
   },
   {

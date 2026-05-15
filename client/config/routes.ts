@@ -16,6 +16,7 @@ const routes = [
       { path: 'devices', component: '@/pages/student/devices' },
       { path: 'borrow', component: '@/pages/student/borrow' },
       { path: 'notifications', component: '@/pages/student/notifications' },
+      { path: 'profile', component: '@/pages/student/profile' },
       { path: 'requests', component: '@/pages/student/requests' }
     ]
   },

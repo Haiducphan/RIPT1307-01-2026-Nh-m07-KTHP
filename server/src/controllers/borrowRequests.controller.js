@@ -4,17 +4,22 @@ function getBorrowRequests(_req, res) {
   res.json(borrowRequests);
 }
 
-function getMyBorrowRequests(_req, res) {
-  res.json(borrowRequests.filter((item) => item.studentId === 'u1'));
+function getMyBorrowRequests(req, res) {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ message: 'Unauthenticated' });
+  res.json(borrowRequests.filter((item) => item.studentId === userId));
 }
 
 function createBorrowRequest(req, res) {
   const device = devices.find((item) => item.id === req.body.deviceId);
 
+  const userId = req.user?.id || 'u1';
+  const userName = req.user?.fullName || 'Nguyen Van A';
+
   const newRequest = {
     id: `br${Date.now()}`,
-    studentId: 'u1',
-    studentName: 'Nguyen Van A',
+    studentId: userId,
+    studentName: userName,
     deviceId: req.body.deviceId,
     deviceName: device?.name || 'Thiet bi dang chon',
     quantity: Number(req.body.quantity || 1),

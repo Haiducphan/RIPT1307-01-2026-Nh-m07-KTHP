@@ -3,13 +3,17 @@ const users = [
     id: 'u1',
     fullName: 'Nguyen Van A',
     email: 'student@example.com',
-    role: 'student'
+    role: 'student',
+    // bcrypt hash of 'studentpass' (for demo)
+    password: '$2a$08$QmvtilfTe6mI6ueDCCOcDu1SoggWtmtO7pRGailPWImhviQQd3Rqa'
   },
   {
     id: 'admin1',
     fullName: 'Quan tri vien',
     email: 'admin@example.com',
-    role: 'admin'
+    role: 'admin',
+    // bcrypt hash of 'adminpass' (for demo)
+    password: '$2a$08$LtA0jIzPIeaPBggo3HM48.r1NEa2ojcl1fOle0jq1GQoFEsXDX3U2'
   }
 ];
 

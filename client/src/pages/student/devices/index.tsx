@@ -1,4 +1,5 @@
-import { Card, Table, Tag } from 'antd';
+import { Card, Table } from 'antd';
+import DeviceStatusTag from '@/components/DeviceStatusTag';
 import PageTitle from '@/components/PageTitle';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { getDevices } from '@/services/devices';
@@ -23,9 +24,7 @@ export default function StudentDevicesPage() {
             {
               title: 'Tinh trang',
               dataIndex: 'status',
-              render: (status: Device['status']) => (
-                <Tag color={status === 'available' ? 'green' : 'orange'}>{status}</Tag>
-              )
+              render: (status: Device['status']) => <DeviceStatusTag status={status} />
             }
           ]}
         />

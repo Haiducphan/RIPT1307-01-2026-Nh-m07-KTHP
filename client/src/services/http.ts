@@ -1,6 +1,6 @@
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 
-const API_BASE_URL = process.env.API_BASE_URL || '/api';
+const API_BASE_URL = process.env.UMI_APP_API_BASE_URL || '/api';
 
 const http = axios.create({
   baseURL: API_BASE_URL,
@@ -8,6 +8,38 @@ const http = axios.create({
     'Content-Type': 'application/json'
   }
 });
+
+http.interceptors.request.use((config) => {
+  try {
+    const raw = localStorage.getItem('borrow_equipment_user');
+    if (raw) {
+      const user = JSON.parse(raw) as { token?: string };
+      if (user.token) {
+        config.headers.Authorization = `Bearer ${user.token}`;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return config;
+});
+
+export function getErrorMessage(error: unknown, fallback: string) {
+  if (isAxiosError(error)) {
+    const data = error.response?.data as { message?: string } | undefined;
+    if (data?.message) {
+      return data.message;
+    }
+    if (error.response?.status === 404) {
+      return 'Khong tim thay du lieu';
+    }
+    if (!error.response) {
+      return 'Khong ket noi duoc server. Hay chay backend (port 4000).';
+    }
+    return error.message || fallback;
+  }
+  return fallback;
+}
 
 export function apiGet<T>(url: string) {
   return http.get<T>(url).then((response) => response.data);

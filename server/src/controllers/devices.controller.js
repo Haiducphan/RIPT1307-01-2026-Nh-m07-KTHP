@@ -1,53 +1,89 @@
-const { devices } = require('../models/mockData');
+const deviceService = require('../services/device.service');
 
-function getDevices(_req, res) {
-  res.json(devices);
-}
+async function getDevices(req, res) {
+  try {
+    const includeDeleted =
+      req.user?.role === 'admin' && String(req.query.includeDeleted) === 'true';
 
-function getDeviceById(req, res) {
-  const device = devices.find((item) => item.id === req.params.id);
-
-  if (!device) {
-    res.status(404).json({ message: 'Device not found' });
-    return;
+    const devices = await deviceService.listDevices({ includeDeleted });
+    res.json(devices);
+  } catch (error) {
+    console.error('getDevices error:', error.message);
+    res.status(500).json({ message: 'Failed to load devices' });
   }
-
-  res.json(device);
 }
 
-function createDevice(req, res) {
-  const newDevice = {
-    ...req.body,
-    id: `d${Date.now()}`
-  };
+async function getDeviceById(req, res) {
+  try {
+    const includeDeleted =
+      req.user?.role === 'admin' && String(req.query.includeDeleted) === 'true';
 
-  devices.unshift(newDevice);
-  res.json(newDevice);
-}
+    const device = await deviceService.getDeviceById(req.params.id, { includeDeleted });
 
-function updateDevice(req, res) {
-  const index = devices.findIndex((item) => item.id === req.params.id);
+    if (!device) {
+      res.status(404).json({ message: 'Device not found' });
+      return;
+    }
 
-  if (index === -1) {
-    res.status(404).json({ message: 'Device not found' });
-    return;
+    res.json(device);
+  } catch (error) {
+    console.error('getDeviceById error:', error.message);
+    res.status(500).json({ message: 'Failed to load device' });
   }
-
-  devices[index] = {
-    ...devices[index],
-    ...req.body
-  };
-  res.json(devices[index]);
 }
 
-function deleteDevice(req, res) {
-  const index = devices.findIndex((item) => item.id === req.params.id);
-
-  if (index >= 0) {
-    devices.splice(index, 1);
+async function createDevice(req, res) {
+  try {
+    const device = await deviceService.createDevice(req.body || {});
+    res.status(201).json(device);
+  } catch (error) {
+    if (error.status === 400) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    console.error('createDevice error:', error.message);
+    res.status(500).json({ message: 'Failed to create device' });
   }
+}
 
-  res.json({ success: true });
+async function updateDevice(req, res) {
+  try {
+    const device = await deviceService.updateDevice(req.params.id, req.body || {});
+
+    if (!device) {
+      res.status(404).json({ message: 'Device not found' });
+      return;
+    }
+
+    res.json(device);
+  } catch (error) {
+    if (error.status === 400) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    console.error('updateDevice error:', error.message);
+    res.status(500).json({ message: 'Failed to update device' });
+  }
+}
+
+async function deleteDevice(req, res) {
+  try {
+    const device = await deviceService.softDeleteDevice(req.params.id);
+
+    if (!device) {
+      res.status(404).json({ message: 'Device not found' });
+      return;
+    }
+
+    res.json({ success: true, device });
+  } catch (error) {
+    if (error.status === 400) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    console.error('deleteDevice error:', error.message);
+    res.status(500).json({ message: 'Failed to delete device' });
+  }
 }
 
 module.exports = {

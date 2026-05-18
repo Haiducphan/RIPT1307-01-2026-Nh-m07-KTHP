@@ -30,19 +30,4 @@ const sequelize = new Sequelize(
   }
 );
 
-// Test kết nối
-const testConnection = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log(' Kết nối Database thành công!');
-  } catch (error) {
-    console.error(' Không thể kết nối Database:', error.message);
-  }
-};
-
-// Chỉ test khi ở môi trường development
-if (process.env.NODE_ENV !== 'production') {
-  testConnection();
-}
-
 module.exports = sequelize;

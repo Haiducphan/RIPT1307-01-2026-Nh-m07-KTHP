@@ -25,6 +25,25 @@ function authenticateJWT(req, res, next) {
   }
 }
 
+function optionalAuthenticateJWT(req, _res, next) {
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  if (!authHeader) {
+    return next();
+  }
+
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    return next();
+  }
+
+  try {
+    req.user = jwt.verify(parts[1], JWT_SECRET);
+  } catch (_err) {
+    // ignore invalid token for optional auth
+  }
+  next();
+}
+
 function authorizeRole(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user) {
@@ -41,5 +60,6 @@ function authorizeRole(...allowedRoles) {
 
 module.exports = {
   authenticateJWT,
+  optionalAuthenticateJWT,
   authorizeRole
 };

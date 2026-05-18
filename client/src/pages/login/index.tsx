@@ -29,7 +29,7 @@ export default function LoginPage() {
       <Card title="Dang nhap he thong" style={{ width: 420, maxWidth: '100%' }}>
         <Form<LoginFormValues>
           layout="vertical"
-          initialValues={{ email: 'student@example.com', password: '123456', role: 'student' }}
+          initialValues={{ email: 'student@example.com', password: 'studentpass', role: 'student' }}
           onFinish={handleSubmit}
         >
           <Form.Item name="role" label="Vai tro">

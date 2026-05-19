@@ -5,7 +5,7 @@ const {
   getDeviceById,
   getDevices,
   updateDevice
-} = require('../controllers/devices.controller');
+} = require('../controllers/equipment.controller');
 const {
   authenticateJWT,
   authorizeRole,

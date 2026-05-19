@@ -1,7 +1,7 @@
 import { Button, Card, Space, Table, Tag } from 'antd';
 import PageTitle from '@/components/PageTitle';
 import { useAsyncData } from '@/hooks/useAsyncData';
-import { getDevices } from '@/services/devices';
+import { getDevices } from '@/services/equipment';
 import type { Device } from '@/types';
 
 export default function AdminDevicesPage() {

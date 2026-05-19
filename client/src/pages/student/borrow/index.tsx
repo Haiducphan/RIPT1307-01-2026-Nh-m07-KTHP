@@ -3,7 +3,7 @@ import type { Dayjs } from 'dayjs';
 import PageTitle from '@/components/PageTitle';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { createBorrowRequest } from '@/services/borrowRequests';
-import { getDevices } from '@/services/devices';
+import { getDevices } from '@/services/equipment';
 
 interface BorrowFormValues {
   deviceId: string;
@@ -13,7 +13,8 @@ interface BorrowFormValues {
 }
 
 export default function StudentBorrowPage() {
-  const { data: devices } = useAsyncData(getDevices);
+  const { data: rawData } = useAsyncData(getDevices);
+  const devices = rawData?.data ?? [];
 
   const handleSubmit = async (values: BorrowFormValues) => {
     const [borrowDate, returnDate] = values.dateRange;
@@ -34,7 +35,7 @@ export default function StudentBorrowPage() {
         <Form layout="vertical" onFinish={handleSubmit} style={{ maxWidth: 640 }}>
           <Form.Item name="deviceId" label="Thiet bi" rules={[{ required: true }]}>
             <Select
-              options={(devices || []).map((device) => ({
+              options={devices.map((device) => ({
                 value: device.id,
                 label: `${device.name} - con ${device.availableQuantity}`
               }))}

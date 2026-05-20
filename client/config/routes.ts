@@ -28,6 +28,7 @@ const routes = [
       { path: '', redirect: 'requests' },
       { path: 'requests', component: '@/pages/admin/requests' },
       { path: 'devices', component: '@/pages/admin/devices' },
+      { path: 'students', component: '@/pages/admin/students' },
       { path: 'returns', component: '@/pages/admin/returns' },
       { path: 'statistics', component: '@/pages/admin/statistics' }
     ]

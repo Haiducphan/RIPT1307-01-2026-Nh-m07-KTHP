@@ -57,6 +57,7 @@ async function listBorrowRequests({ studentId, status, page = 1, limit = 20 } = 
   const where = {};
   if (studentId) where.studentId = studentId;
   if (status) where.status = status;
+  console.log('where:', where);
 
   const offset = (page - 1) * limit;
   const { count, rows } = await BorrowRequest.findAndCountAll({
@@ -65,8 +66,58 @@ async function listBorrowRequests({ studentId, status, page = 1, limit = 20 } = 
     limit: Number(limit),
     offset
   });
-
+ console.log('count:', count, 'rows:', rows.length); // thêm dòng này
   return { total: count, page: Number(page), totalPages: Math.ceil(count / limit), data: rows };
 }
 
-module.exports = { createBorrowRequest, listBorrowRequests };
+async function handoverBorrowRequest(id, adminId) {
+  const request = await BorrowRequest.findOne({ where: { id, status: 'approved' } });
+  if (!request) {
+    const err = new Error('Khong tim thay don hoac don chua duoc duyet');
+    err.status = 404;
+    throw err;
+  }
+
+  await request.update({
+    status: 'borrowing',
+    handedOverAt: new Date(),
+    handedOverBy: adminId
+  });
+
+  return request;
+}
+
+async function returnBorrowRequest(id, adminId, returnCondition) {
+  const request = await BorrowRequest.findOne({ where: { id, status: 'borrowing' } });
+  if (!request) {
+    const err = new Error('Khong tim thay don hoac thiet bi chua duoc ban giao');
+    err.status = 404;
+    throw err;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const isLate = today > request.returnDate;
+  const lateDays = isLate
+    ? Math.floor((new Date(today) - new Date(request.returnDate)) / (1000 * 60 * 60 * 24))
+    : 0;
+
+  await request.update({
+    status: isLate ? 'returned_late' : 'returned_ontime',
+    actualReturnDate: today,
+    returnCondition: returnCondition || 'perfect',
+    returnCheckedBy: adminId,
+    lateDays
+  });
+
+  const equipment = await Equipment.findByPk(request.equipmentId);
+  if (equipment) {
+    await equipment.update({
+      availableQuantity: equipment.availableQuantity + request.quantity,
+      borrowingQuantity: equipment.borrowingQuantity - request.quantity
+    });
+  }
+
+  return request;
+}
+
+module.exports = { createBorrowRequest, listBorrowRequests, handoverBorrowRequest, returnBorrowRequest };

@@ -12,6 +12,7 @@ async function getBorrowRequests(req, res) {
 }
 
 async function getMyBorrowRequests(req, res) {
+  console.log('user id:', req.user.id);
   try {
     const { status, page, limit } = req.query;
     const result = await borrowRequestService.listBorrowRequests({
@@ -56,7 +57,14 @@ async function createBorrowRequest(req, res) {
 }
 
 async function approveBorrowRequest(req, res) {
-  res.status(501).json({ message: 'Chua implement' });
+  try {
+    const request = await borrowRequestService.handoverBorrowRequest(req.params.id, req.user.id);
+    res.json(request);
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ message: error.message });
+    console.error('approveBorrowRequest error:', error.message);
+    res.status(500).json({ message: 'Failed to handover' });
+  }
 }
 
 async function rejectBorrowRequest(req, res) {
@@ -64,7 +72,15 @@ async function rejectBorrowRequest(req, res) {
 }
 
 async function markReturned(req, res) {
-  res.status(501).json({ message: 'Chua implement' });
+  try {
+    const { returnCondition } = req.body;
+    const request = await borrowRequestService.returnBorrowRequest(req.params.id, req.user.id, returnCondition);
+    res.json(request);
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ message: error.message });
+    console.error('markReturned error:', error.message);
+    res.status(500).json({ message: 'Failed to return' });
+  }
 }
 
 module.exports = {

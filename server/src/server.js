@@ -30,3 +30,4 @@ syncDatabase()
     console.error('Database sync failed:', error.message);
     process.exit(1);
   });
+console.log('DB name:', process.env.DB_NAME);

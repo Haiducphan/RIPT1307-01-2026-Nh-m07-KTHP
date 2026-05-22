@@ -109,7 +109,7 @@ function StatCard({
   const color = tone === 'success' ? '#4F8B5F' : tone === 'danger' ? '#B05A4D' : '#1A1F1B';
   return (
     <Card
-      bordered={false}
+      variant="borderless"
       style={{
         borderRadius: 14,
         border: tone === 'danger' ? '1px solid #B05A4D' : '1px solid #E5DECB',
@@ -130,7 +130,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   return (
     <Card
       title={<span style={{ fontFamily: 'Georgia, serif', fontSize: 18, fontWeight: 500 }}>{title}</span>}
-      bordered={false}
+      variant="borderless"
       style={{ borderRadius: 14, border: '1px solid #E5DECB', height: '100%' }}
     >
       {children}
@@ -239,7 +239,7 @@ export default function AdminStatisticsPage() {
           <ChartCard title="Top 5 sinh viên uy tín cao">
             <div style={{ display: 'grid', gap: 12 }}>
               {topStudents.map((student) => (
-                <Card key={student.mssv} bordered={false} style={{ border: '1px solid #EFEADA', borderRadius: 12 }} styles={{ body: { padding: 14 } }}>
+                <Card key={student.mssv} variant="borderless" style={{ border: '1px solid #EFEADA', borderRadius: 12 }} styles={{ body: { padding: 14 } }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '34px 48px 1fr auto', alignItems: 'center', gap: 12 }}>
                     <Typography.Text strong style={{ color: '#C99A3F', fontSize: 18 }}>#{student.rank}</Typography.Text>
                     <Avatar size={42} style={{ background: '#2D4A3E', color: '#F5EBD0', fontWeight: 700 }}>
@@ -268,7 +268,7 @@ export default function AdminStatisticsPage() {
             <Tag color="red">8 đơn</Tag>
           </div>
         }
-        bordered={false}
+        variant="borderless"
         style={{ borderRadius: 14, border: '1px solid #E5DECB', marginTop: 20 }}
       >
         <Table

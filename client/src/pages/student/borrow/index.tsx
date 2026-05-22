@@ -164,7 +164,7 @@ export default function StudentBorrowPage() {
       <Row gutter={[32, 32]}>
         <Col xs={24} lg={10}>
           <Card
-            bordered={false}
+            variant="borderless"
             style={{ borderRadius: 16, border: '1px solid #E5DECB', background: '#EFE9DD' }}
             styles={{ body: { minHeight: 420, display: 'grid', placeItems: 'center', position: 'relative' } }}
           >
@@ -249,7 +249,7 @@ export default function StudentBorrowPage() {
               ['ĐANG CHO MƯỢN', borrowedQuantity, '#1A1F1B']
             ].map(([label, value, color]) => (
               <Col xs={24} sm={8} key={String(label)}>
-                <Card bordered={false} style={{ borderRadius: 12, border: '1px solid #E5DECB' }} styles={{ body: { padding: 16 } }}>
+                <Card variant="borderless" style={{ borderRadius: 12, border: '1px solid #E5DECB' }} styles={{ body: { padding: 16 } }}>
                   <div style={{ fontSize: 11, color: '#6B6F6C', marginBottom: 6 }}>{label}</div>
                   <div style={{ fontSize: 24, fontWeight: 700, color: String(color) }}>{value}</div>
                 </Card>
@@ -271,7 +271,7 @@ export default function StudentBorrowPage() {
 
           <Card
             title={<span style={{ fontFamily: 'Georgia, serif', fontSize: 18, fontWeight: 500 }}>Đăng ký mượn</span>}
-            bordered={false}
+            variant="borderless"
             style={{ borderRadius: 14, border: '1px solid #E5DECB' }}
           >
             <Form<BorrowFormValues>

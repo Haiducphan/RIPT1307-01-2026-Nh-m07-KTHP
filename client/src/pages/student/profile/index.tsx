@@ -85,7 +85,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function SmallStatCard({ title, value, meta }: { title: string; value: string; meta: string }) {
   return (
     <Card
-      bordered={false}
+      variant="borderless"
       style={{ borderRadius: 14, border: '1px solid #E5DECB', boxShadow: '0 1px 2px rgba(45, 74, 62, 0.04)' }}
       styles={{ body: { padding: 20 } }}
     >
@@ -131,7 +131,7 @@ export default function StudentProfilePage() {
       <Row gutter={[24, 24]} align="top">
         <Col xs={24} md={8}>
           <Card
-            bordered={false}
+            variant="borderless"
             style={{ borderRadius: 18, background: '#2D4A3E', color: '#FFFFFF', overflow: 'hidden' }}
             styles={{ body: { padding: 26 } }}
           >
@@ -152,7 +152,7 @@ export default function StudentProfilePage() {
             </div>
           </Card>
 
-          <Card bordered={false} style={{ borderRadius: 14, border: '1px solid #E5DECB', marginTop: 16 }} styles={{ body: { padding: 22 } }}>
+          <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB', marginTop: 16 }} styles={{ body: { padding: 22 } }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
               <Avatar size={64} style={{ background: '#2D4A3E', color: '#F5EBD0', fontWeight: 700 }}>
                 {profile.initials}
@@ -190,7 +190,7 @@ export default function StudentProfilePage() {
           </Row>
 
           <Card
-            bordered={false}
+            variant="borderless"
             style={{ borderRadius: 14, border: '1px solid #E5DECB' }}
             title={<span style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 500 }}>Lịch sử điểm uy tín</span>}
             extra={<Button>Xem tất cả</Button>}

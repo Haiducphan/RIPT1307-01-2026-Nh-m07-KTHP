@@ -18,7 +18,7 @@ export default function StatsCard({ title, value, suffix, meta, featured }: Stat
         boxShadow: '0 1px 2px rgba(45, 74, 62, 0.04)'
       }}
       styles={{ body: { padding: 22 } }}
-      bordered={false}
+      variant="borderless"
     >
       <div
         style={{

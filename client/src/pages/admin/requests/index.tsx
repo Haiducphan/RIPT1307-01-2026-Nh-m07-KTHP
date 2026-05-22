@@ -185,7 +185,7 @@ function StatusTag({ status }: { status: RequestStatus }) {
 function StatCard({ title, value, meta, danger, featured }: { title: string; value: number; meta: string; danger?: boolean; featured?: boolean }) {
   return (
     <Card
-      bordered={false}
+      variant="borderless"
       style={{ borderRadius: 14, border: featured ? '1px solid #2D4A3E' : '1px solid #E5DECB', background: featured ? '#2D4A3E' : '#FFFFFF' }}
       styles={{ body: { padding: 20 } }}
     >
@@ -340,7 +340,7 @@ export default function AdminRequestsPage() {
         </Col>
       </Row>
       <Tabs activeKey={activeTab} items={tabItems} onChange={(key) => setActiveTab(key as RequestTab)} />
-      <Card bordered={false} style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
+      <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
           <Input.Search
             allowClear

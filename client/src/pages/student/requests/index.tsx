@@ -216,7 +216,7 @@ export default function StudentRequestsPage() {
       />
 
       {loading ? (
-        <Card bordered={false} style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
+        <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
           <Empty description="Đang tải danh sách yêu cầu..." />
         </Card>
       ) : requests.length === 0 ? (
@@ -235,7 +235,7 @@ export default function StudentRequestsPage() {
                     <Card
                       key={request.id}
                       hoverable
-                      bordered={false}
+                      variant="borderless"
                       onClick={() => setSelectedId(request.id)}
                       style={{
                         borderRadius: 14,
@@ -289,7 +289,7 @@ export default function StudentRequestsPage() {
           <Col xs={24} xl={10}>
             {selectedRequest ? (
               <Card
-                bordered={false}
+                variant="borderless"
                 style={{
                   borderRadius: 14,
                   border: '1px solid #E5DECB',

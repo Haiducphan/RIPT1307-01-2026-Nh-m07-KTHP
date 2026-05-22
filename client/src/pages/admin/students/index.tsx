@@ -88,7 +88,7 @@ function RankTag({ rank }: { rank: StudentRank }) {
 
 function StatCard({ title, value, meta, danger }: { title: string; value: number; meta: string; danger?: boolean }) {
   return (
-    <Card bordered={false} style={{ borderRadius: 14, border: danger ? '1px solid #B05A4D' : '1px solid #E5DECB' }} styles={{ body: { padding: 20 } }}>
+    <Card variant="borderless" style={{ borderRadius: 14, border: danger ? '1px solid #B05A4D' : '1px solid #E5DECB' }} styles={{ body: { padding: 20 } }}>
       <div style={{ color: '#6B6F6C', fontSize: 11, letterSpacing: '0.08em' }}>{title}</div>
       <div style={{ fontFamily: 'Georgia, serif', fontSize: 34, color: danger ? '#B05A4D' : '#1A1F1B', marginTop: 8 }}>{value}</div>
       <div style={{ color: '#6B6F6C', fontSize: 12 }}>{meta}</div>
@@ -180,7 +180,7 @@ export default function AdminStudentsPage() {
         <Col xs={24} sm={12} xl={6}><StatCard title="HẠNG VÀNG TRỞ LÊN" value={45} meta="uy tín cao" /></Col>
       </Row>
 
-      <Card bordered={false} style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
+      <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
           <Input.Search allowClear placeholder="Tìm theo MSSV, tên, email..." value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: 320 }} />
           <Select

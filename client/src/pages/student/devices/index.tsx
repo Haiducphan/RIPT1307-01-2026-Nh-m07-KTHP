@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Col, Empty, Input, Row, Spin } from 'antd';
+import { Button, Col, Empty, Grid, Input, Row, Skeleton } from 'antd';
 import { history } from '@umijs/max';
 import EquipmentCard from '@/components/EquipmentCard';
 import StatsCard from '@/components/StatsCard';
@@ -93,6 +93,8 @@ function matchFilter(device: Device, filter: string) {
 
 export default function StudentDevicesPage() {
   const { currentUser } = useAuthStore();
+  const screens = Grid.useBreakpoint();
+  const isMobile = !screens.md;
   const { data: devices = [], loading } = useAsyncData(getDevices);
   const [searchText, setSearchText] = useState('');
   const [activeFilter, setActiveFilter] = useState(FILTERS[0]);
@@ -137,8 +139,9 @@ export default function StudentDevicesPage() {
       <div
         style={{
           display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
           justifyContent: 'space-between',
-          alignItems: 'flex-end',
+          alignItems: isMobile ? 'flex-start' : 'flex-end',
           gap: 24,
           marginBottom: 32,
           flexWrap: 'wrap'
@@ -221,15 +224,51 @@ export default function StudentDevicesPage() {
       </div>
 
       {loading ? (
-        <div style={{ display: 'grid', placeItems: 'center', minHeight: 260 }}>
-          <Spin size="large" />
-        </div>
+        <Row gutter={[18, 18]}>
+          {Array.from({ length: 8 }, (_, index) => (
+            <Col key={index} xs={24} sm={12} md={8} lg={6}>
+              <div
+                style={{
+                  borderRadius: 16,
+                  border: '1px solid #E5DECB',
+                  background: '#FFFFFF',
+                  padding: 18
+                }}
+              >
+                <Skeleton.Image active style={{ width: '100%', height: 150, borderRadius: 12 }} />
+                <Skeleton active paragraph={{ rows: 2 }} title={{ width: '70%' }} style={{ marginTop: 16 }} />
+                <Skeleton.Button active block style={{ height: 40, borderRadius: 10 }} />
+              </div>
+            </Col>
+          ))}
+        </Row>
       ) : filteredDevices.length === 0 ? (
-        <Empty description="Không tìm thấy thiết bị phù hợp" style={{ padding: '64px 0' }} />
+        <Empty
+          image={<div style={{ fontSize: 60 }}>🔍</div>}
+          styles={{ image: { height: 80, marginBottom: 16 } }}
+          description={
+            <div>
+              <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Không tìm thấy thiết bị nào</h3>
+              <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                Thử thay đổi từ khoá tìm kiếm hoặc bộ lọc khác
+              </p>
+            </div>
+          }
+          style={{ padding: '70px 0' }}
+        >
+          <Button
+            onClick={() => {
+              setSearchText('');
+              setActiveFilter(FILTERS[0]);
+            }}
+          >
+            Xoá bộ lọc
+          </Button>
+        </Empty>
       ) : (
         <Row gutter={[18, 18]}>
           {filteredDevices.map((device) => (
-            <Col key={device.id} xs={24} sm={12} lg={8} xl={6}>
+            <Col key={device.id} xs={24} sm={12} md={8} lg={6}>
               <EquipmentCard device={device} onBorrow={handleBorrow} />
             </Col>
           ))}

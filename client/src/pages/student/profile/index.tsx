@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Avatar, Button, Card, Col, Form, Input, Modal, Progress, Row, Table, Tag, Typography, message } from 'antd';
+import { useEffect, useState } from 'react';
+import { Avatar, Button, Card, Col, Form, Input, Modal, Progress, Row, Skeleton, Table, Tag, Typography, message } from 'antd';
 
 interface TrustHistoryRow {
   id: string;
@@ -102,11 +102,82 @@ function SmallStatCard({ title, value, meta }: { title: string; value: string; m
 
 export default function StudentProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 700);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const handleSaveProfile = () => {
     setEditOpen(false);
     message.success('Đã lưu nháp hồ sơ');
   };
+
+  if (loading) {
+    return (
+      <div style={{ paddingBottom: 48 }}>
+        <div style={{ marginBottom: 28 }}>
+          <h1
+            style={{
+              fontFamily: 'Georgia, serif',
+              fontSize: 34,
+              fontWeight: 500,
+              lineHeight: 1.1,
+              color: '#1A1F1B',
+              margin: '0 0 8px'
+            }}
+          >
+            Hồ sơ cá nhân
+          </h1>
+          <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+            Quản lý thông tin tài khoản và theo dõi điểm uy tín
+          </p>
+        </div>
+
+        <Row gutter={[24, 24]} align="top">
+          <Col xs={24} md={8}>
+            <Card variant="borderless" style={{ borderRadius: 18, background: '#2D4A3E' }} styles={{ body: { padding: 26 } }}>
+              <Skeleton.Input active size="small" style={{ width: 120, marginBottom: 18 }} />
+              <Skeleton.Input active style={{ width: 180, height: 36, marginBottom: 26 }} />
+              <Skeleton.Input active style={{ width: 132, height: 70, marginBottom: 18 }} />
+              <Skeleton.Input active block style={{ height: 12 }} />
+            </Card>
+
+            <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB', marginTop: 16 }} styles={{ body: { padding: 22 } }}>
+              <Skeleton active avatar={{ size: 64 }} paragraph={{ rows: 4 }} title={{ width: '55%' }} />
+              <Skeleton.Button active block style={{ height: 40, marginTop: 18 }} />
+            </Card>
+          </Col>
+
+          <Col xs={24} md={16}>
+            <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+              {Array.from({ length: 3 }, (_, index) => (
+                <Col xs={24} lg={8} key={index}>
+                  <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }} styles={{ body: { padding: 20 } }}>
+                    <Skeleton.Input active size="small" style={{ width: 120, marginBottom: 12 }} />
+                    <Skeleton.Input active style={{ width: 72, height: 38, marginBottom: 12 }} />
+                    <Skeleton.Input active size="small" block />
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+
+            <Card
+              variant="borderless"
+              style={{ borderRadius: 14, border: '1px solid #E5DECB' }}
+              title={<Skeleton.Input active style={{ width: 180 }} />}
+              extra={<Skeleton.Button active />}
+            >
+              {Array.from({ length: 5 }, (_, index) => (
+                <Skeleton key={index} active paragraph={{ rows: 1 }} title={{ width: '70%' }} style={{ marginBottom: 18 }} />
+              ))}
+            </Card>
+          </Col>
+        </Row>
+      </div>
+    );
+  }
 
   return (
     <div style={{ paddingBottom: 48 }}>
@@ -199,6 +270,7 @@ export default function StudentProfilePage() {
               rowKey="id"
               pagination={false}
               dataSource={trustHistory}
+              scroll={{ x: 'max-content' }}
               columns={[
                 {
                   title: 'Thời gian',

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Avatar, Button, Card, Col, message, Row, Select, Table, Tag, Typography } from 'antd';
+import { useEffect, useState } from 'react';
+import { Avatar, Button, Card, Col, message, Row, Select, Skeleton, Table, Tag, Typography } from 'antd';
 import {
   Bar,
   BarChart,
@@ -145,6 +145,61 @@ function pieLabel({ name, percent }: PieLabelProps) {
 export default function AdminStatisticsPage() {
   const [range, setRange] = useState('30');
   const [month, setMonth] = useState(5);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 700);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ paddingBottom: 48 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 34, fontWeight: 500, margin: '0 0 8px', color: '#1A1F1B' }}>
+              Bảng điều khiển thống kê
+            </h1>
+            <p style={{ color: '#6B6F6C', margin: 0 }}>Tổng quan hoạt động mượn-trả của CLB</p>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Select disabled value={range} style={{ width: 150 }} options={[{ value: '30', label: '30 ngày' }]} />
+            <Select disabled value={month} style={{ width: 130 }} options={[{ value: month, label: `Tháng ${month}` }]} />
+          </div>
+        </div>
+
+        <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+          {Array.from({ length: 4 }, (_, index) => (
+            <Col xs={24} sm={12} xl={6} key={index}>
+              <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }} styles={{ body: { padding: 20 } }}>
+                <Skeleton.Input active size="small" style={{ width: 130, marginBottom: 14 }} />
+                <Skeleton.Input active style={{ width: 88, height: 42, marginBottom: 14 }} />
+                <Skeleton.Input active size="small" block />
+              </Card>
+            </Col>
+          ))}
+        </Row>
+
+        <Row gutter={[20, 20]}>
+          {['Xu hướng mượn 12 tháng', 'Top 5 thiết bị mượn nhiều', 'Phân bổ trạng thái đơn', 'Top 5 sinh viên uy tín cao'].map((title) => (
+            <Col xs={24} xl={12} key={title}>
+              <ChartCard title={title}>
+                <Skeleton.Input active block style={{ height: 300 }} />
+              </ChartCard>
+            </Col>
+          ))}
+        </Row>
+
+        <Card
+          title={<Skeleton.Input active style={{ width: 230 }} />}
+          variant="borderless"
+          style={{ borderRadius: 14, border: '1px solid #E5DECB', marginTop: 20 }}
+        >
+          <Skeleton active paragraph={{ rows: 4 }} />
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={{ paddingBottom: 48 }}>
@@ -275,6 +330,7 @@ export default function AdminStatisticsPage() {
           rowKey="id"
           pagination={false}
           dataSource={overdueRequests}
+          scroll={{ x: 'max-content' }}
           columns={[
             { title: 'Mã đơn', dataIndex: 'id', render: (id: string) => <Typography.Text strong>{id}</Typography.Text> },
             { title: 'Sinh viên', dataIndex: 'student' },

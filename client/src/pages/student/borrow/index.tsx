@@ -143,16 +143,25 @@ export default function StudentBorrowPage() {
   const borrowedQuantity = Math.max(device.totalQuantity - device.availableQuantity, 0);
 
   const handleSubmit = async (values: BorrowFormValues) => {
-    await createBorrowRequest({
-      deviceId: device.id,
-      quantity: values.quantity,
-      borrowDate: values.borrowDate.format('YYYY-MM-DD'),
-      returnDate: values.returnDate.format('YYYY-MM-DD'),
-      note: `[${values.eventName}] ${values.purpose}`
-    });
+    const hideLoading = message.loading('Đang gửi yêu cầu mượn...', 0);
 
-    message.success('Đã gửi yêu cầu mượn');
-    history.push('/student/requests');
+    try {
+      await createBorrowRequest({
+        deviceId: device.id,
+        quantity: values.quantity,
+        borrowDate: values.borrowDate.format('YYYY-MM-DD'),
+        returnDate: values.returnDate.format('YYYY-MM-DD'),
+        note: `[${values.eventName}] ${values.purpose}`
+      });
+
+      hideLoading();
+      message.success('Đã gửi yêu cầu mượn', 2);
+      history.push('/student/requests');
+    } catch (error) {
+      hideLoading();
+      console.error('Create borrow request failed:', error);
+      message.error('Không thể gửi yêu cầu mượn. Vui lòng thử lại.', 3);
+    }
   };
 
   return (

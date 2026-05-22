@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Avatar,
   Button,
   Card,
   Col,
   Dropdown,
+  Empty,
   Form,
   Input,
   InputNumber,
@@ -99,11 +100,17 @@ function StatCard({ title, value, meta, danger }: { title: string; value: number
 export default function AdminStudentsPage() {
   const [restoreForm] = Form.useForm<RestoreFormValues>();
   const [students, setStudents] = useState(mockStudents);
+  const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [rankFilter, setRankFilter] = useState<StudentRank | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<StudentStatus | 'all'>('all');
   const [detailStudent, setDetailStudent] = useState<Student>();
   const [restoreStudent, setRestoreStudent] = useState<Student>();
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 700);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const filteredStudents = useMemo(() => {
     const keyword = normalizeText(searchText.trim());
@@ -165,7 +172,7 @@ export default function AdminStudentsPage() {
 
   return (
     <div style={{ paddingBottom: 48 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 34, fontWeight: 500, margin: '0 0 8px', color: '#1A1F1B' }}>Quản lý sinh viên</h1>
           <p style={{ color: '#6B6F6C', margin: 0 }}>Theo dõi điểm uy tín và lịch sử vi phạm</p>
@@ -182,7 +189,7 @@ export default function AdminStudentsPage() {
 
       <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-          <Input.Search allowClear placeholder="Tìm theo MSSV, tên, email..." value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: 320 }} />
+          <Input.Search allowClear placeholder="Tìm theo MSSV, tên, email..." value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: 320, maxWidth: '100%' }} />
           <Select
             value={rankFilter}
             onChange={setRankFilter}
@@ -211,8 +218,37 @@ export default function AdminStudentsPage() {
 
         <Table<Student>
           rowKey="id"
+          loading={loading}
           dataSource={filteredStudents}
           pagination={{ pageSize: 8 }}
+          scroll={{ x: 'max-content' }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={<div style={{ fontSize: 64 }}>🔍</div>}
+                styles={{ image: { height: 84, marginBottom: 14 } }}
+                description={
+                  <div>
+                    <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Không tìm thấy sinh viên nào</h3>
+                    <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                      Thử thay đổi từ khoá hoặc bộ lọc khác.
+                    </p>
+                  </div>
+                }
+                style={{ padding: '60px 0' }}
+              >
+                <Button
+                  onClick={() => {
+                    setSearchText('');
+                    setRankFilter('all');
+                    setStatusFilter('all');
+                  }}
+                >
+                  Xoá bộ lọc
+                </Button>
+              </Empty>
+            )
+          }}
           columns={[
             {
               title: 'Sinh viên',
@@ -313,7 +349,7 @@ export default function AdminStudentsPage() {
                 {
                   key: 'borrow',
                   label: 'Lịch sử mượn',
-                  children: <Table rowKey="id" pagination={false} dataSource={borrowHistory} columns={[
+                  children: <Table rowKey="id" pagination={false} dataSource={borrowHistory} scroll={{ x: 'max-content' }} columns={[
                     { title: 'Đơn', dataIndex: 'id' },
                     { title: 'Thiết bị', dataIndex: 'device' },
                     { title: 'Ngày', dataIndex: 'date' },
@@ -323,7 +359,7 @@ export default function AdminStudentsPage() {
                 {
                   key: 'score',
                   label: 'Lịch sử điểm',
-                  children: <Table rowKey="id" pagination={false} dataSource={scoreHistory} columns={[
+                  children: <Table rowKey="id" pagination={false} dataSource={scoreHistory} scroll={{ x: 'max-content' }} columns={[
                     { title: 'Thời gian', dataIndex: 'time' },
                     { title: 'Hành động', dataIndex: 'action' },
                     { title: '+/-', dataIndex: 'points' },

@@ -6,6 +6,7 @@ import {
   Checkbox,
   Col,
   DatePicker,
+  Empty,
   Form,
   Input,
   message,
@@ -243,33 +244,56 @@ export default function AdminRequestsPage() {
     setRequests((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   };
   const handleApprove = (request: AdminRequest) => {
-    // TODO: Kết nối API khi BE2 ready
-    updateStatus(request.id, { status: 'approved' });
-    message.success('Đã duyệt đơn');
+    try {
+      // TODO: Kết nối API khi BE2 ready
+      updateStatus(request.id, { status: 'approved' });
+      message.success('Đã duyệt đơn', 2);
+    } catch (error) {
+      console.error('Approve request failed:', error);
+      message.error('Không thể duyệt đơn. Vui lòng thử lại.', 3);
+    }
   };
   const handleReject = (values: RejectFormValues) => {
     if (!rejectTarget) return;
-    // TODO: Kết nối API khi BE2 ready
-    updateStatus(rejectTarget.id, { status: 'rejected', rejectReason: values.reason });
-    setRejectTarget(undefined);
-    rejectForm.resetFields();
-    message.success('Đã từ chối');
+
+    try {
+      // TODO: Kết nối API khi BE2 ready
+      updateStatus(rejectTarget.id, { status: 'rejected', rejectReason: values.reason });
+      setRejectTarget(undefined);
+      rejectForm.resetFields();
+      message.success('Đã từ chối', 2);
+    } catch (error) {
+      console.error('Reject request failed:', error);
+      message.error('Không thể từ chối đơn. Vui lòng thử lại.', 3);
+    }
   };
   const handleHandOver = () => {
     if (!handoverTarget) return;
-    // TODO: Kết nối API khi BE2 ready
-    updateStatus(handoverTarget.id, { status: 'borrowed' });
-    setHandoverTarget(undefined);
-    setHandoverChecked(false);
-    message.success('Đã ghi nhận bàn giao');
+
+    try {
+      // TODO: Kết nối API khi BE2 ready
+      updateStatus(handoverTarget.id, { status: 'borrowed' });
+      setHandoverTarget(undefined);
+      setHandoverChecked(false);
+      message.success('Đã ghi nhận bàn giao', 2);
+    } catch (error) {
+      console.error('Hand over request failed:', error);
+      message.error('Không thể ghi nhận bàn giao. Vui lòng thử lại.', 3);
+    }
   };
   const handleReturn = (values: ReturnFormValues) => {
     if (!returnTarget) return;
-    // TODO: Kết nối API khi BE2 ready
-    updateStatus(returnTarget.id, { status: 'returned', returnCondition: values.condition, returnNote: values.note });
-    setReturnTarget(undefined);
-    returnForm.resetFields();
-    message.success('Đã ghi nhận trả');
+
+    try {
+      // TODO: Kết nối API khi BE2 ready
+      updateStatus(returnTarget.id, { status: 'returned', returnCondition: values.condition, returnNote: values.note });
+      setReturnTarget(undefined);
+      returnForm.resetFields();
+      message.success('Đã ghi nhận trả', 2);
+    } catch (error) {
+      console.error('Return request failed:', error);
+      message.error('Không thể ghi nhận trả. Vui lòng thử lại.', 3);
+    }
   };
   const openRejectModal = (request: AdminRequest) => {
     setRejectTarget(request);
@@ -357,9 +381,55 @@ export default function AdminRequestsPage() {
         </div>
         <Table<AdminRequest>
           rowKey="id"
-          loading={loading}
+          loading={{ spinning: loading, tip: 'Đang tải yêu cầu...' }}
           dataSource={filteredRequests}
           pagination={{ pageSize: 8 }}
+          scroll={{ x: 'max-content' }}
+          locale={{
+            emptyText: requests.length === 0 ? (
+              <Empty
+                image={<div style={{ fontSize: 80 }}>✅</div>}
+                styles={{ image: { height: 96, marginBottom: 16 } }}
+                description={
+                  <div>
+                    <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Không có yêu cầu cần xử lý</h3>
+                    <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                      Tất cả yêu cầu mượn đã được xử lý xong.
+                    </p>
+                  </div>
+                }
+                style={{ padding: '64px 0' }}
+              />
+            ) : activeTab === 'pending' ? (
+              <Empty
+                image={<div style={{ fontSize: 70 }}>✅</div>}
+                styles={{ image: { height: 90, marginBottom: 14 } }}
+                description={
+                  <div>
+                    <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Không có đơn chờ duyệt</h3>
+                    <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                      Tất cả đơn đã được duyệt hoặc xử lý.
+                    </p>
+                  </div>
+                }
+                style={{ padding: '60px 0' }}
+              />
+            ) : (
+              <Empty
+                image={<div style={{ fontSize: 64 }}>🔍</div>}
+                styles={{ image: { height: 84, marginBottom: 14 } }}
+                description={
+                  <div>
+                    <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Không tìm thấy yêu cầu nào</h3>
+                    <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                      Thử đổi tab, từ khoá tìm kiếm hoặc khoảng thời gian khác.
+                    </p>
+                  </div>
+                }
+                style={{ padding: '60px 0' }}
+              />
+            )
+          }}
           columns={[
             { title: 'Mã đơn', render: (_, request) => <Typography.Text strong>{getRequestCode(request)}</Typography.Text> },
             {

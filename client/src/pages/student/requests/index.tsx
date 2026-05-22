@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Empty, Modal, Row, Steps, Tabs, Tag, Typography, message } from 'antd';
+import { Button, Card, Col, Empty, Modal, Row, Skeleton, Steps, Tabs, Tag, Typography, message } from 'antd';
 import dayjs from 'dayjs';
+import { history } from '@umijs/max';
 import { getMyBorrowRequests } from '@/services/borrowRequests';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import type { BorrowRequest } from '@/types';
@@ -216,17 +217,62 @@ export default function StudentRequestsPage() {
       />
 
       {loading ? (
-        <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
-          <Empty description="Đang tải danh sách yêu cầu..." />
-        </Card>
+        <Row gutter={[24, 24]} align="top">
+          <Col xs={24} xl={14}>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {Array.from({ length: 4 }, (_, index) => (
+                <Card key={index} variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }} styles={{ body: { padding: 18 } }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 92px', gap: 14, alignItems: 'center' }}>
+                    <Skeleton.Avatar active shape="square" size={44} />
+                    <Skeleton active paragraph={{ rows: 1 }} title={{ width: '62%' }} />
+                    <Skeleton.Button active block style={{ height: 34 }} />
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </Col>
+          <Col xs={24} xl={10}>
+            <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
+              <Skeleton active paragraph={{ rows: 7 }} title={{ width: '58%' }} />
+            </Card>
+          </Col>
+        </Row>
       ) : requests.length === 0 ? (
-        <Empty description="Bạn chưa có đơn mượn nào" style={{ padding: '72px 0' }} />
+        <Empty
+          image={<div style={{ fontSize: 80 }}>📋</div>}
+          styles={{ image: { height: 96, marginBottom: 16 } }}
+          description={
+            <div>
+              <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Chưa có yêu cầu nào</h3>
+              <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                Bạn chưa gửi yêu cầu mượn nào. Hãy bắt đầu bằng việc chọn thiết bị!
+              </p>
+            </div>
+          }
+          style={{ padding: '76px 0' }}
+        >
+          <Button type="primary" onClick={() => history.push('/student/devices')}>
+            Xem danh sách thiết bị
+          </Button>
+        </Empty>
       ) : (
         <Row gutter={[24, 24]} align="top">
           <Col xs={24} xl={14}>
             <div style={{ display: 'grid', gap: 12 }}>
               {filteredRequests.length === 0 ? (
-                <Empty description="Không có đơn trong nhóm này" style={{ padding: '56px 0' }} />
+                <Empty
+                  image={<div style={{ fontSize: 64 }}>📭</div>}
+                  styles={{ image: { height: 84, marginBottom: 14 } }}
+                  description={
+                    <div>
+                      <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Không có đơn nào trong mục này</h3>
+                      <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                        Chuyển sang tab khác để xem các đơn mượn của bạn
+                      </p>
+                    </div>
+                  }
+                  style={{ padding: '64px 0' }}
+                />
               ) : (
                 filteredRequests.map((request) => {
                   const selected = selectedRequest?.id === request.id;
@@ -343,7 +389,19 @@ export default function StudentRequestsPage() {
                 )}
               </Card>
             ) : (
-              <Empty description="Chọn một đơn để xem chi tiết" />
+              <Empty
+                image={<div style={{ fontSize: 60 }}>📄</div>}
+                styles={{ image: { height: 80, marginBottom: 14 } }}
+                description={
+                  <div>
+                    <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Chọn một đơn để xem chi tiết</h3>
+                    <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                      Nhấn vào một thẻ yêu cầu bên trái để xem tiến trình và thông tin mượn.
+                    </p>
+                  </div>
+                }
+                style={{ padding: '48px 0' }}
+              />
             )}
           </Col>
         </Row>

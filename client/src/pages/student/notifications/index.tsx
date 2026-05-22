@@ -216,7 +216,29 @@ export default function NotificationsPage() {
         }}
       >
         {filteredNotifications.length === 0 ? (
-          <Empty description="Không có thông báo trong nhóm này" style={{ padding: '64px 0' }} />
+          <Empty
+            image={<div style={{ fontSize: notifications.length === 0 ? 80 : 64 }}>{notifications.length === 0 ? '🔔' : activeTab === 'unread' ? '✅' : '📭'}</div>}
+            styles={{ image: { height: 96, marginBottom: 16 } }}
+            description={
+              <div>
+                <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>
+                  {notifications.length === 0
+                    ? 'Chưa có thông báo nào'
+                    : activeTab === 'unread'
+                      ? 'Bạn đã đọc hết thông báo'
+                      : 'Không có thông báo trong mục này'}
+                </h3>
+                <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                  {notifications.length === 0
+                    ? 'Khi có cập nhật về đơn mượn hoặc điểm uy tín, bạn sẽ thấy ở đây.'
+                    : activeTab === 'unread'
+                      ? 'Tuyệt vời! Không còn thông báo chưa đọc nào.'
+                      : 'Chuyển sang tab khác để xem các thông báo phù hợp.'}
+                </p>
+              </div>
+            }
+            style={{ padding: '72px 0' }}
+          />
         ) : (
           <List
             dataSource={filteredNotifications}

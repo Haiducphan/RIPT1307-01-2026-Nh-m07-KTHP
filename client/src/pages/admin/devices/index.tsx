@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Col,
+  Empty,
   Form,
   Input,
   InputNumber,
@@ -183,38 +184,45 @@ export default function AdminDevicesPage() {
   };
 
   const handleSave = (values: DeviceFormValues) => {
-    // TODO: Kết nối API khi BE2 ready
-    if (editingDevice) {
-      setDevices((current) =>
-        current.map((device) =>
-          device.id === editingDevice.id
-            ? {
-                ...device,
-                ...values,
-                status: values.availableQuantity > 0 ? 'available' : device.status
-              }
-            : device
-        )
-      );
-      message.success('Đã cập nhật');
-    } else {
-      const newDevice: AdminDevice = {
-        id: `local-${Date.now()}`,
-        name: values.name,
-        code: values.code,
-        category: values.category,
-        tier: values.tier,
-        totalQuantity: values.totalQuantity,
-        availableQuantity: values.availableQuantity,
-        description: values.description,
-        status: 'available',
-        active: true
-      };
-      setDevices((current) => [newDevice, ...current]);
-      message.success('Đã thêm thiết bị');
+    const isEditing = Boolean(editingDevice);
+
+    try {
+      // TODO: Kết nối API khi BE2 ready
+      if (editingDevice) {
+        setDevices((current) =>
+          current.map((device) =>
+            device.id === editingDevice.id
+              ? {
+                  ...device,
+                  ...values,
+                  status: values.availableQuantity > 0 ? 'available' : device.status
+                }
+              : device
+          )
+        );
+        message.success('Đã cập nhật', 2);
+      } else {
+        const newDevice: AdminDevice = {
+          id: `local-${Date.now()}`,
+          name: values.name,
+          code: values.code,
+          category: values.category,
+          tier: values.tier,
+          totalQuantity: values.totalQuantity,
+          availableQuantity: values.availableQuantity,
+          description: values.description,
+          status: 'available',
+          active: true
+        };
+        setDevices((current) => [newDevice, ...current]);
+        message.success('Đã thêm thiết bị', 2);
+      }
+      setModalOpen(false);
+      form.resetFields();
+    } catch (error) {
+      console.error('Save device failed:', error);
+      message.error(`Không thể ${isEditing ? 'cập nhật' : 'thêm'} thiết bị. Vui lòng thử lại.`, 3);
     }
-    setModalOpen(false);
-    form.resetFields();
   };
 
   const handleDelete = (device: AdminDevice) => {
@@ -225,22 +233,32 @@ export default function AdminDevicesPage() {
       cancelText: 'Huỷ',
       okButtonProps: { danger: true },
       onOk: () => {
-        // TODO: Kết nối API khi BE2 ready
-        setDevices((current) => current.filter((item) => item.id !== device.id));
-        message.success('Đã xoá');
+        try {
+          // TODO: Kết nối API khi BE2 ready
+          setDevices((current) => current.filter((item) => item.id !== device.id));
+          message.success('Đã xoá', 2);
+        } catch (error) {
+          console.error('Delete device failed:', error);
+          message.error('Không thể xoá thiết bị. Vui lòng thử lại.', 3);
+        }
       }
     });
   };
 
   const handleToggleStatus = (device: AdminDevice, active: boolean) => {
-    // TODO: Kết nối API khi BE2 ready
-    setDevices((current) => current.map((item) => (item.id === device.id ? { ...item, active } : item)));
-    message.success('Đã cập nhật trạng thái');
+    try {
+      // TODO: Kết nối API khi BE2 ready
+      setDevices((current) => current.map((item) => (item.id === device.id ? { ...item, active } : item)));
+      message.success('Đã cập nhật trạng thái', 2);
+    } catch (error) {
+      console.error('Toggle device status failed:', error);
+      message.error('Không thể cập nhật trạng thái. Vui lòng thử lại.', 3);
+    }
   };
 
   return (
     <div style={{ paddingBottom: 48 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 34, fontWeight: 500, margin: '0 0 8px', color: '#1A1F1B' }}>
             Quản lý kho thiết bị
@@ -296,9 +314,45 @@ export default function AdminDevicesPage() {
 
         <Table<AdminDevice>
           rowKey="id"
-          loading={loading}
+          loading={{ spinning: loading, tip: 'Đang tải thiết bị...' }}
           dataSource={filteredDevices}
           pagination={{ pageSize: 8 }}
+          scroll={{ x: 'max-content' }}
+          locale={{
+            emptyText: devices.length === 0 ? (
+              <Empty
+                image={<div style={{ fontSize: 80 }}>📦</div>}
+                styles={{ image: { height: 96, marginBottom: 16 } }}
+                description={
+                  <div>
+                    <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Chưa có thiết bị trong kho</h3>
+                    <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                      Thêm thiết bị đầu tiên để CLB bắt đầu cho mượn.
+                    </p>
+                  </div>
+                }
+                style={{ padding: '64px 0' }}
+              >
+                <Button type="primary" onClick={openAddModal} style={{ background: '#2D4A3E', borderColor: '#2D4A3E' }}>
+                  + Thêm thiết bị
+                </Button>
+              </Empty>
+            ) : (
+              <Empty
+                image={<div style={{ fontSize: 64 }}>🔍</div>}
+                styles={{ image: { height: 84, marginBottom: 14 } }}
+                description={
+                  <div>
+                    <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Không tìm thấy thiết bị nào</h3>
+                    <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                      Thử thay đổi từ khoá tìm kiếm hoặc bộ lọc khác.
+                    </p>
+                  </div>
+                }
+                style={{ padding: '60px 0' }}
+              />
+            )
+          }}
           columns={[
             {
               title: 'Tên thiết bị',

@@ -67,10 +67,45 @@ async function softDeleteEquipment(id) {
   return equipment.update({ isDeleted: true });
 }
 
+async function updateStock(id, { totalQuantity, availableQuantity }) {
+  const equipment = await Equipment.findOne({ where: { id, isDeleted: false } });
+  if (!equipment) {
+    const err = new Error('Thiet bi khong ton tai');
+    err.status = 404;
+    throw err;
+  }
+
+  if (totalQuantity !== undefined && totalQuantity < 0) {
+    const err = new Error('Tong so luong khong duoc am');
+    err.status = 400;
+    throw err;
+  }
+
+  if (availableQuantity !== undefined && availableQuantity < 0) {
+    const err = new Error('So luong con lai khong duoc am');
+    err.status = 400;
+    throw err;
+  }
+
+  if (availableQuantity !== undefined && totalQuantity !== undefined && availableQuantity > totalQuantity) {
+    const err = new Error('So luong con lai khong duoc lon hon tong so luong');
+    err.status = 400;
+    throw err;
+  }
+
+  await equipment.update({
+    ...(totalQuantity !== undefined && { totalQuantity }),
+    ...(availableQuantity !== undefined && { availableQuantity })
+  });
+
+  return equipment;
+}
+
 module.exports = {
   listEquipment,
   getEquipmentById,
   createEquipment,
   updateEquipment,
-  softDeleteEquipment
+  softDeleteEquipment,
+  updateStock
 };

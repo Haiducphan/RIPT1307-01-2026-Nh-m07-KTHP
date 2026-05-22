@@ -94,4 +94,23 @@ async function deleteDevice(req, res) {
   }
 }
 
-module.exports = { getDevices, getDeviceById, createDevice, updateDevice, deleteDevice };
+async function updateStock(req, res) {
+  try {
+    const { totalQuantity, availableQuantity } = req.body;
+
+    if (totalQuantity === undefined && availableQuantity === undefined) {
+      return res.status(400).json({ message: 'Can nhap totalQuantity hoac availableQuantity' });
+    }
+
+    const equipment = await equipmentService.updateStock(req.params.id, { totalQuantity, availableQuantity });
+    res.json(equipment);
+  } catch (error) {
+    if (error.status === 400 || error.status === 404) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error('updateStock error:', error.message);
+    res.status(500).json({ message: 'Failed to update stock' });
+  }
+}
+
+module.exports = { getDevices, getDeviceById, createDevice, updateDevice, deleteDevice, updateStock };

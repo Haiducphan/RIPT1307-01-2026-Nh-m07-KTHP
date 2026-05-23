@@ -19,7 +19,7 @@ import {
   Upload
 } from 'antd';
 import { useAsyncData } from '@/hooks/useAsyncData';
-import { getDevices } from '@/services/devices';
+import { getDevices } from '@/services/equipment';
 import type { Device } from '@/types';
 
 type DeviceTier = 'S' | 'A' | 'B' | 'C';

@@ -1,50 +1,77 @@
-const { borrowRequests, devices } = require('../models/mockData');
+const { borrowRequests } = require('../models/mockData');
+const equipmentService = require('../services/equipment.service');
 
 function getBorrowRequests(_req, res) {
   res.json(borrowRequests);
 }
 
-function getMyBorrowRequests(_req, res) {
-  res.json(borrowRequests.filter((item) => item.studentId === 'u1'));
+function getMyBorrowRequests(req, res) {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ message: 'Unauthenticated' });
+  res.json(borrowRequests.filter((item) => String(item.studentId) === String(userId)));
 }
 
-function createBorrowRequest(req, res) {
-  const device = devices.find((item) => item.id === req.body.deviceId);
+async function createBorrowRequest(req, res) {
+  try {
+    const equipment = await equipmentService.getEquipmentById(req.body.deviceId);
+    if (!equipment) {
+      return res.status(404).json({ message: 'Device not found' });
+    }
 
-  const newRequest = {
-    id: `br${Date.now()}`,
-    studentId: 'u1',
-    studentName: 'Nguyen Van A',
-    deviceId: req.body.deviceId,
-    deviceName: device?.name || 'Thiet bi dang chon',
-    quantity: Number(req.body.quantity || 1),
-    borrowDate: req.body.borrowDate,
-    returnDate: req.body.returnDate,
-    status: 'pending',
-    note: req.body.note
-  };
+    if (equipment.availableQuantity < 1) {
+      return res.status(400).json({ message: 'Device is not available for borrowing' });
+    }
 
-  borrowRequests.unshift(newRequest);
-  res.json(newRequest);
+    const userId = req.user?.id || 'u1';
+    const userName = req.user?.fullName || 'Nguyen Van A';
+
+    const newRequest = {
+      id: `br${Date.now()}`,
+      studentId: String(userId),
+      studentName: userName,
+      deviceId: equipment.id,
+      deviceName: equipment.name,
+      quantity: Number(req.body.quantity || 1),
+      borrowDate: req.body.borrowDate,
+      returnDate: req.body.returnDate,
+      status: 'pending',
+      note: req.body.note
+    };
+
+    borrowRequests.unshift(newRequest);
+    res.status(201).json(newRequest);
+  } catch (error) {
+    console.error('createBorrowRequest error:', error.message);
+    res.status(500).json({ message: 'Failed to create borrow request' });
+  }
 }
 
-function approveBorrowRequest(req, res) {
-  const request = borrowRequests.find((item) => item.id === req.params.id);
+async function approveBorrowRequest(req, res) {
+  try {
+    const request = borrowRequests.find((item) => item.id === req.params.id);
 
-  if (!request) {
-    res.status(404).json({ message: 'Borrow request not found' });
-    return;
+    if (!request) {
+      res.status(404).json({ message: 'Borrow request not found' });
+      return;
+    }
+
+    const equipment = await equipmentService.getEquipmentById(request.deviceId);
+    if (!equipment) {
+      res.status(404).json({ message: 'Device not found' });
+      return;
+    }
+
+    if (equipment.availableQuantity < request.quantity) {
+      res.status(400).json({ message: 'Not enough device quantity' });
+      return;
+    }
+
+    request.status = 'borrowed';
+    res.json(request);
+  } catch (error) {
+    console.error('approveBorrowRequest error:', error.message);
+    res.status(500).json({ message: 'Failed to approve borrow request' });
   }
-
-  const device = devices.find((item) => item.id === request.deviceId);
-  if (!device || device.availableQuantity < request.quantity) {
-    res.status(400).json({ message: 'Not enough device quantity' });
-    return;
-  }
-
-  device.availableQuantity -= request.quantity;
-  request.status = 'borrowed';
-  res.json(request);
 }
 
 function rejectBorrowRequest(req, res) {
@@ -65,11 +92,6 @@ function markReturned(req, res) {
   if (!request) {
     res.status(404).json({ message: 'Borrow request not found' });
     return;
-  }
-
-  const device = devices.find((item) => item.id === request.deviceId);
-  if (device && request.status !== 'returned') {
-    device.availableQuantity += request.quantity;
   }
 
   request.status = 'returned';

@@ -1,12 +1,29 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.API_BASE_URL || '/api';
+const API_BASE_URL = process.env.UMI_APP_API_BASE_URL || '/api';
 
 const http = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
+});
+
+// Attach Authorization header from stored user token (if available)
+http.interceptors.request.use((config) => {
+  try {
+    const raw = localStorage.getItem('borrow_equipment_user');
+    if (raw) {
+      const user = JSON.parse(raw);
+      if (user?.token) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${user.token}`;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return config;
 });
 
 export function apiGet<T>(url: string) {

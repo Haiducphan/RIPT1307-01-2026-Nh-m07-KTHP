@@ -7,14 +7,15 @@ const {
   markReturned,
   rejectBorrowRequest
 } = require('../controllers/borrowRequests.controller');
+const { authenticateJWT, authorizeRole } = require('../middleware/auth.middleware');
 
 const router = Router();
 
-router.get('/', getBorrowRequests);
-router.get('/my', getMyBorrowRequests);
-router.post('/', createBorrowRequest);
-router.patch('/:id/approve', approveBorrowRequest);
-router.patch('/:id/reject', rejectBorrowRequest);
-router.patch('/:id/return', markReturned);
+router.get('/', authenticateJWT, authorizeRole('admin'), getBorrowRequests);
+router.get('/my', authenticateJWT, authorizeRole('student'), getMyBorrowRequests);
+router.post('/', authenticateJWT, authorizeRole('student'), createBorrowRequest);
+router.patch('/:id/approve', authenticateJWT, authorizeRole('admin'), approveBorrowRequest);
+router.patch('/:id/reject', authenticateJWT, authorizeRole('admin'), rejectBorrowRequest);
+router.patch('/:id/return', authenticateJWT, authorizeRole('admin'), markReturned);
 
 module.exports = router;

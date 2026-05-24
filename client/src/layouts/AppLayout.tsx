@@ -10,6 +10,18 @@ import { useAuthStore } from '@/stores/authStore';
 const { Header, Content, Sider } = Layout;
 const MOBILE_BREAKPOINT = 768;
 
+function getDisplayUserName(fullName?: string) {
+  const name = fullName?.trim();
+  if (!name) return '';
+
+  const legacyNames: Record<string, string> = {
+    'Nguyen Van A': 'Nguyễn Văn A',
+    'Quan tri vien': 'Quản trị viên'
+  };
+
+  return legacyNames[name] ?? name;
+}
+
 export default function AppLayout() {
   const location = useLocation();
   const { currentUser, signOut } = useAuthStore();
@@ -37,16 +49,16 @@ export default function AppLayout() {
   };
 
   const studentItems: MenuProps['items'] = [
-    { key: ROUTES.studentDevices, label: 'Danh sach thiet bi' },
-    { key: ROUTES.studentBorrow, label: 'Gui yeu cau muon' },
-    { key: ROUTES.studentRequests, label: 'Lich su muon' }
+    { key: ROUTES.studentDevices, label: 'Danh sách thiết bị' },
+    { key: ROUTES.studentBorrow, label: 'Gửi yêu cầu mượn' },
+    { key: ROUTES.studentRequests, label: 'Lịch sử mượn' }
   ];
 
   const adminItems: MenuProps['items'] = [
-    { key: ROUTES.adminRequests, label: 'Yeu cau muon' },
-    { key: ROUTES.adminDevices, label: 'Quan ly kho' },
-    { key: ROUTES.adminReturns, label: 'Ghi nhan tra' },
-    { key: ROUTES.adminStatistics, label: 'Thong ke' }
+    { key: ROUTES.adminRequests, label: 'Yêu cầu mượn' },
+    { key: ROUTES.adminDevices, label: 'Quản lý kho' },
+    { key: ROUTES.adminReturns, label: 'Ghi nhận trả' },
+    { key: ROUTES.adminStatistics, label: 'Thống kê' }
   ];
 
   const menuItems = isAdmin ? adminItems : studentItems;
@@ -71,14 +83,14 @@ export default function AppLayout() {
       {!isMobile && (
         <Sider theme="light" width={240}>
           <Typography.Title level={4} style={{ padding: '20px 16px 8px' }}>
-            Muon do dung
+            Mượn đồ dùng
           </Typography.Title>
           {renderMenu()}
         </Sider>
       )}
 
       <Drawer
-        title="Muon do dung"
+        title="Mượn đồ dùng"
         placement="left"
         width={240}
         open={isMobile && drawerOpen}
@@ -104,11 +116,25 @@ export default function AppLayout() {
           ) : (
             <span />
           )}
-          <Space style={{ marginLeft: 'auto' }} size={isMobile ? 8 : 12}>
-            <Typography.Text ellipsis style={{ maxWidth: isMobile ? 130 : 240 }}>
-              {currentUser?.fullName}
+          <Space
+            align="center"
+            size={isMobile ? 8 : 12}
+            style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', height: '100%' }}
+          >
+            <Typography.Text
+              ellipsis
+              style={{
+                maxWidth: isMobile ? 130 : 240,
+                height: 32,
+                lineHeight: '32px',
+                display: 'inline-block'
+              }}
+            >
+              {getDisplayUserName(currentUser?.fullName)}
             </Typography.Text>
-            <Button onClick={handleSignOut}>Dang xuat</Button>
+            <Button onClick={handleSignOut} style={{ height: 32, display: 'inline-flex', alignItems: 'center' }}>
+              Đăng xuất
+            </Button>
           </Space>
         </Header>
         <Content style={{ padding: isMobile ? 12 : 24, overflowX: 'hidden' }}>

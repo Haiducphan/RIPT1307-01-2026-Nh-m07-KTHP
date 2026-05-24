@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Col, DatePicker, Empty, Form, Input, InputNumber, message, Row, Select, Spin, Tag } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
@@ -106,6 +106,7 @@ function EmptyBorrowState() {
 
 export default function StudentBorrowPage() {
   const [form] = Form.useForm<BorrowFormValues>();
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const location = useLocation();
   const { currentUser } = useAuthStore();
   const deviceId = useMemo(() => new URLSearchParams(location.search).get('deviceId'), [location.search]);
@@ -113,6 +114,10 @@ export default function StudentBorrowPage() {
     () => (deviceId ? getDeviceById(deviceId) : Promise.resolve(undefined)),
     [deviceId]
   );
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [deviceId]);
 
   const userMeta = currentUser as (typeof currentUser & {
     trustRank?: TrustRank;
@@ -141,6 +146,9 @@ export default function StudentBorrowPage() {
   const hasStock = device.availableQuantity > 0;
   const formDisabled = !hasRequiredRank || !hasStock;
   const borrowedQuantity = Math.max(device.totalQuantity - device.availableQuantity, 0);
+  const galleryItems = device.images?.length ? device.images : device.image ? [device.image] : ['icon-1', 'icon-2', 'icon-3'];
+  const activeGalleryItem = galleryItems[Math.min(activeImageIndex, galleryItems.length - 1)];
+  const hasRealImages = Boolean(device.images?.length || device.image);
 
   const handleSubmit = async (values: BorrowFormValues) => {
     const hideLoading = message.loading('Đang gửi yêu cầu mượn...', 0);
@@ -175,9 +183,40 @@ export default function StudentBorrowPage() {
           <Card
             variant="borderless"
             style={{ borderRadius: 16, border: '1px solid #E5DECB', background: '#EFE9DD' }}
-            styles={{ body: { minHeight: 420, display: 'grid', placeItems: 'center', position: 'relative' } }}
+            styles={{ body: { minHeight: 420, display: 'grid', placeItems: 'center', position: 'relative', padding: 18 } }}
           >
-            <div style={{ fontSize: 112, lineHeight: 1 }}>{icon}</div>
+            {hasRealImages ? (
+              <img
+                key={activeGalleryItem}
+                src={activeGalleryItem}
+                alt={device.name}
+                style={{
+                  width: '100%',
+                  height: 360,
+                  objectFit: 'cover',
+                  borderRadius: 14,
+                  display: 'block',
+                  transition: 'opacity 0.2s ease'
+                }}
+              />
+            ) : (
+              <div
+                key={activeGalleryItem}
+                style={{
+                  width: '100%',
+                  height: 360,
+                  borderRadius: 14,
+                  background: '#F5F1E8',
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontSize: 118,
+                  lineHeight: 1,
+                  transition: 'opacity 0.2s ease'
+                }}
+              >
+                {icon}
+              </div>
+            )}
             <div
               style={{
                 position: 'absolute',
@@ -199,26 +238,54 @@ export default function StudentBorrowPage() {
             </div>
           </Card>
 
-          <Row gutter={10} style={{ marginTop: 12 }}>
-            {[0, 1, 2].map((index) => (
-              <Col span={8} key={index}>
-                <div
-                  style={{
-                    aspectRatio: '1',
-                    borderRadius: 10,
-                    border: index === 0 ? '2px solid #2D4A3E' : '1px solid #E5DECB',
-                    background: '#FFFFFF',
-                    display: 'grid',
-                    placeItems: 'center',
-                    fontSize: 28,
-                    opacity: index === 0 ? 1 : 0.55
-                  }}
-                >
-                  {icon}
-                </div>
-              </Col>
-            ))}
-          </Row>
+          {galleryItems.length > 1 && (
+            <Row gutter={10} style={{ marginTop: 12 }}>
+              {galleryItems.map((item, index) => {
+                const active = activeImageIndex === index;
+
+                return (
+                  <Col span={8} key={`${item}-${index}`}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveImageIndex(index)}
+                      style={{
+                        width: '100%',
+                        aspectRatio: '1',
+                        borderRadius: 10,
+                        border: active ? '2px solid #2D4A3E' : '1px solid #E5E5E5',
+                        background: active ? '#EFE9DD' : '#F5F1E8',
+                        padding: 4,
+                        cursor: 'pointer',
+                        overflow: 'hidden',
+                        opacity: active ? 1 : 0.78,
+                        transition: 'border-color 0.2s ease, transform 0.2s ease, opacity 0.2s ease'
+                      }}
+                      onMouseEnter={(event) => {
+                        event.currentTarget.style.borderColor = '#6BA67B';
+                        event.currentTarget.style.transform = 'scale(1.02)';
+                      }}
+                      onMouseLeave={(event) => {
+                        event.currentTarget.style.borderColor = active ? '#2D4A3E' : '#E5E5E5';
+                        event.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      {hasRealImages ? (
+                        <img
+                          src={item}
+                          alt={`${device.name} ${index + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }}
+                        />
+                      ) : (
+                        <span style={{ display: 'grid', placeItems: 'center', width: '100%', height: '100%', fontSize: 34, lineHeight: 1 }}>
+                          {icon}
+                        </span>
+                      )}
+                    </button>
+                  </Col>
+                );
+              })}
+            </Row>
+          )}
         </Col>
 
         <Col xs={24} lg={14}>

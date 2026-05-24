@@ -34,9 +34,16 @@ function normalizeText(value: string) {
     .toLowerCase();
 }
 
-function getLastName(fullName?: string) {
-  const parts = fullName?.trim().split(/\s+/) ?? [];
-  return parts[parts.length - 1] || 'bạn';
+function getDisplayName(fullName?: string) {
+  const name = fullName?.trim();
+  if (!name) return 'bạn';
+
+  const legacyNames: Record<string, string> = {
+    'Nguyen Van A': 'Nguyễn Văn A',
+    'Quan tri vien': 'Quản trị viên'
+  };
+
+  return legacyNames[name] ?? name;
 }
 
 function getDeviceIcon(device: Device) {
@@ -135,7 +142,7 @@ export default function StudentDevicesPage() {
   };
 
   return (
-    <div style={{ paddingBottom: 48 }}>
+    <div style={{ paddingBottom: 48, maxWidth: 1280, width: '100%' }}>
       <div
         style={{
           display: 'flex',
@@ -158,7 +165,7 @@ export default function StudentDevicesPage() {
               margin: '0 0 8px'
             }}
           >
-            Xin chào, <em style={{ color: '#2D4A3E' }}>{getLastName(currentUser?.fullName)}</em>
+            Xin chào, <em style={{ color: '#2D4A3E' }}>{getDisplayName(currentUser?.fullName)}</em>
           </h1>
           <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
             Có {availableCount} thiết bị đang sẵn sàng cho bạn mượn hôm nay.
@@ -169,16 +176,16 @@ export default function StudentDevicesPage() {
       </div>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} md={12} xl={6}>
           <StatsCard title="ĐANG MƯỢN" value={MOCK_STATS.borrowing} meta="thiết bị" />
         </Col>
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} md={12} xl={6}>
           <StatsCard title="CHỜ DUYỆT" value={MOCK_STATS.pending} meta="yêu cầu" />
         </Col>
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} md={12} xl={6}>
           <StatsCard title="ĐÃ TỪNG MƯỢN" value={MOCK_STATS.returned} meta="lượt thành công" />
         </Col>
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} md={12} xl={6}>
           <StatsCard title="CHUỖI TỐT" value={MOCK_STATS.streak} meta="+7đ thưởng 🎉" featured />
         </Col>
       </Row>

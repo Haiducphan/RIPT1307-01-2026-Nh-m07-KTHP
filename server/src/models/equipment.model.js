@@ -1,6 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
+// Model equipment
 const Equipment = sequelize.define(
   'Equipment',
   {
@@ -51,7 +52,7 @@ const Equipment = sequelize.define(
       defaultValue: 0
     },
     conditionStatus: {
-      type: DataTypes.ENUM('good', 'fair', 'poor'),
+      type: DataTypes.ENUM('good', 'fair', 'damaged'), 
       allowNull: false,
       defaultValue: 'good'
     },
@@ -60,10 +61,11 @@ const Equipment = sequelize.define(
       allowNull: false,
       defaultValue: 'C'
     },
-    isDeleted: {
+    isActive: { 
       type: DataTypes.BOOLEAN,
       allowNull: false,
-      defaultValue: false
+      defaultValue: true,
+      field: 'is_active'
     }
   },
   {

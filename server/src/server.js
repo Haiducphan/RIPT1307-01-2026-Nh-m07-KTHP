@@ -14,6 +14,8 @@ const port = Number(process.env.PORT || 4000);
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:8000' }));
 app.use(express.json());
 
+app.use(express.static(path.join(__dirname, '../public')));
+
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });

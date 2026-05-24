@@ -1,5 +1,5 @@
 const sequelize = require('./database');
-const Equipment = require('../models/equipment.models');
+const Equipment = require('../models/equipment.model');
 
 async function syncDatabase() {
   await sequelize.authenticate();

@@ -12,14 +12,16 @@ const {
   authorizeRole,
   optionalAuthenticateJWT
 } = require('../middleware/auth.middleware');
+const uploadEquipmentImages = require('../middleware/upload.middleware');
 
 const router = Router();
 
 router.get('/', optionalAuthenticateJWT, getDevices);
 router.get('/:id', optionalAuthenticateJWT, getDeviceById);
-router.post('/', authenticateJWT, authorizeRole('admin'), createDevice);
-router.put('/:id', authenticateJWT, authorizeRole('admin'), updateDevice);
+router.post('/', authenticateJWT, authorizeRole('admin'), uploadEquipmentImages, createDevice);
+router.put('/:id', authenticateJWT, authorizeRole('admin'), uploadEquipmentImages, updateDevice);
 router.patch('/:id/stock', authenticateJWT, authorizeRole('admin'), updateStock);
 router.delete('/:id', authenticateJWT, authorizeRole('admin'), deleteDevice);
+
 
 module.exports = router;

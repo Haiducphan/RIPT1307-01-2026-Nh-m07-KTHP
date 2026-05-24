@@ -8,6 +8,10 @@ const routes = [
     component: '@/pages/login'
   },
   {
+    path: '/register',
+    component: '@/pages/register'
+  },
+  {
     path: '/student',
     component: '@/layouts/AppLayout',
     wrappers: ['@/wrappers/StudentGuard'],

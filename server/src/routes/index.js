@@ -3,6 +3,7 @@ const authRoutes = require('./auth.routes');
 const borrowRequestRoutes = require('./borrowRequests.routes');
 const equipmentRoutes = require('./equipment.routes');
 const categoryRoutes = require('./category.routes');
+const dashboardRoutes = require('./dashboard.routes');
 
 const router = Router();
 
@@ -10,6 +11,8 @@ router.use('/auth', authRoutes);
 router.use('/equipment', equipmentRoutes);
 router.use('/borrow-requests', borrowRequestRoutes);
 router.use('/categories', categoryRoutes);
+router.use('/stats', dashboardRoutes);
+
 
 // Test thử Cronjob
 const { runDailyTasks } = require('../services/cron.service');

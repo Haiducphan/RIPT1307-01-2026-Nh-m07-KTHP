@@ -15,22 +15,21 @@ async function checkOverdueRequests() {
   const transaction = await sequelize.transaction();
 
   try {
-    // Tìm các đơn đang mượn (borrowing) có hạn trả (returnDate) nhỏ hơn hôm nay
+    // Tìm các đơn đang mượn (borrowing) hoặc đã quá hạn (overdue) có hạn trả (returnDate) nhỏ hơn hôm nay
     const overdueRequests = await BorrowRequest.findAll({
       where: {
-        status: 'borrowing',
+        status: { [Op.in]: ['borrowing', 'overdue'] },
         returnDate: { [Op.lt]: today }
       },
       transaction
     });
 
     for (const request of overdueRequests) {
-      // Tính số ngày trễ
+      // Tính số ngày trễ tổng cộng để lưu vào Database báo cáo Admin
       const returnDate = new Date(request.returnDate);
       const diffTime = Math.abs(today - returnDate);
       const lateDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
-      // Cập nhật trạng thái đơn thành 'overdue' (Quá hạn)
       await request.update({ 
         status: 'overdue',
         lateDays: lateDays
@@ -39,9 +38,10 @@ async function checkOverdueRequests() {
       // Xử lý trừ điểm uy tín sinh viên
       const student = await Student.findByPk(request.studentId, { transaction });
       if (student) {
-        const penalty = lateDays * 3;
         
-        const scoreBefore = student.trustScore; 
+        const penalty = 3; 
+        
+        const scoreBefore = student.trustScore;
         const rankBefore = student.trustRank;
         
         let scoreAfter = scoreBefore - penalty;
@@ -65,7 +65,7 @@ async function checkOverdueRequests() {
           rankBefore: rankBefore,
           rankAfter: rankAfter,
           reason: 'late_return', 
-          createdBy: 1
+          createdBy: 1 
         }, { transaction });
       }
     }

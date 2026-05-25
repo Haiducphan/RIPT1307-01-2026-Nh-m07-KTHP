@@ -27,7 +27,7 @@ syncDatabase()
   .then(() => {
     app.listen(port, () => {
       console.log(`Server is running on http://localhost:${port}`);
-      // startCronJobs();    // test cronjob
+      startCronJobs();    // test cronjob
     });
   })
   .catch((error) => {

@@ -2,6 +2,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const express = require('express');
+const { startCronJobs } = require('./services/cron.service');
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
@@ -26,6 +27,7 @@ syncDatabase()
   .then(() => {
     app.listen(port, () => {
       console.log(`Server is running on http://localhost:${port}`);
+      // startCronJobs();    // test cronjob
     });
   })
   .catch((error) => {

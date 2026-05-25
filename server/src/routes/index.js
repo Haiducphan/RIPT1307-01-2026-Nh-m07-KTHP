@@ -11,4 +11,20 @@ router.use('/equipment', equipmentRoutes);
 router.use('/borrow-requests', borrowRequestRoutes);
 router.use('/categories', categoryRoutes);
 
+// Test thử Cronjob
+const { checkOverdueRequests } = require('../services/cron.service');
+const { authenticateJWT, authorizeRole } = require('../middleware/auth.middleware');
+
+// API Ẩn: Ép chạy Cronjob quét quá hạn
+router.post('/test/run-cron-overdue', authenticateJWT, authorizeRole('admin'), async (req, res) => {
+  try {
+    // Chạy hàm quét mà không cần đợi lịch
+    await checkOverdueRequests(); 
+    res.json({ message: 'Đã kích hoạt quét đơn quá hạn thành công! Vui lòng kiểm tra Terminal hoặc Database.' });
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi khi chạy Cronjob' });
+  }
+});
+// Hết test
+
 module.exports = router;

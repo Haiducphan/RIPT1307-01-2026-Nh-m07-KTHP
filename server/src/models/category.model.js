@@ -19,7 +19,7 @@ const Category = sequelize.define('Category', {
   icon: {
     type: DataTypes.STRING(100)
   },
-  sortOrder: { // Sẽ map thành sort_order
+  sortOrder: {
     type: DataTypes.INTEGER,
     allowNull: false,
     defaultValue: 0

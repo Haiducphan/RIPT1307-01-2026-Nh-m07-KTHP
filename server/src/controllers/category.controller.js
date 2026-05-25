@@ -1,6 +1,6 @@
 const categoryService = require('../services/category.service');
 
-// API lấy danh mục
+// Lấy danh mục
 async function getCategories(req, res) {
   try {
     const categories = await categoryService.getAllCategories();

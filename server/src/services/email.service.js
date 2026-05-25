@@ -1,6 +1,6 @@
 const nodemailer = require('nodemailer');
+const EmailTemplate = require('../models/emailTemplate.model'); // Gọi model động
 
-// Khởi tạo người đưa thư
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -9,50 +9,43 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Hàm gửi email dùng chung
-async function sendEmail(toEmail, subject, htmlContent) {
+// Hàm biên dịch giao diện
+function compileTemplate(htmlBody, placeholders) {
+  let compiled = htmlBody;
+  for (const key in placeholders) {
+    compiled = compiled.replace(new RegExp(`{{${key}}}`, 'g'), placeholders[key]);
+  }
+  return compiled;
+}
+
+// Hàm gửi email tự động
+async function sendDynamicEmail(templateCode, toEmail, placeholders) {
   try {
+    // Tìm mẫu thư trong DB theo code
+    const template = await EmailTemplate.findOne({ where: { code: templateCode, isActive: true } });
+    if (!template) {
+      console.error(`Không tìm thấy mẫu email có mã: ${templateCode}`);
+      return false;
+    }
+
+    // Biên dịch tiêu đề và nội dung thư
+    const subject = compileTemplate(template.subject, placeholders);
+    const htmlContent = compileTemplate(template.body, placeholders);
+
+    // Tiến hành gửi mail
     const info = await transporter.sendMail({
       from: `"Hệ thống Quản lý Thiết bị" <${process.env.MAIL_USER}>`,
       to: toEmail,
       subject: subject,
       html: htmlContent
     });
-    console.log('Email sent: ' + info.response);
+
+    console.log(`[EMAIL] Đã gửi thư thành công: ${templateCode}`);
     return true;
   } catch (error) {
-    console.error('Lỗi gửi email:', error);
+    console.error(`[EMAIL] Thất bại khi gửi mẫu ${templateCode}:`, error.message);
     return false;
   }
 }
 
-// Mẫu Email Từ chối
-async function sendRejectionEmail(studentEmail, studentName, requestCode, reason) {
-  const subject = `[CLB] Thông báo từ chối đơn mượn thiết bị ${requestCode}`;
-  const htmlContent = `
-    <h3>Xin chào ${studentName},</h3>
-    <p>Rất tiếc, đơn mượn thiết bị mã <b>${requestCode}</b> của bạn đã bị từ chối.</p>
-    <p><b>Lý do:</b> ${reason}</p>
-    <p>Vui lòng liên hệ Admin nếu bạn có thắc mắc.</p>
-    <br><p>Trân trọng,</p>
-  `;
-  return sendEmail(studentEmail, subject, htmlContent);
-}
-
-// Mẫu Email Duyệt đơn
-async function sendApprovalEmail(studentEmail, studentName, requestCode) {
-  const subject = `[CLB] Đơn mượn thiết bị ${requestCode} đã được duyệt`;
-  const htmlContent = `
-    <h3>Xin chào ${studentName},</h3>
-    <p>Đơn mượn thiết bị mã <b>${requestCode}</b> của bạn đã được duyệt thành công!</p>
-    <p>Vui lòng đến phòng CLB để nhận thiết bị trong vòng <b>48 giờ</b> tới.</p>
-    <p>Nếu bạn không đến nhận, hệ thống sẽ tự hủy đơn và trừ điểm uy tín của bạn.</p>
-    <br><p>Trân trọng,</p>
-  `;
-  return sendEmail(studentEmail, subject, htmlContent);
-}
-
-module.exports = {
-  sendRejectionEmail,
-  sendApprovalEmail
-};
+module.exports = { sendDynamicEmail };

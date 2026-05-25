@@ -55,11 +55,10 @@ async function approveRequest(requestId, adminId) {
       if (studentInfo && studentInfo.user) {
         const targetEmail = studentInfo.user.email; 
 
-        await emailService.sendApprovalEmail(
-          targetEmail, 
-          studentInfo.fullName, 
-          request.requestCode
-        );
+        await emailService.sendDynamicEmail('request_approved', targetEmail, {
+          name: studentInfo.fullName,
+          request_code: request.requestCode
+        });
       }
     } catch (emailErr) {
       console.error('Lỗi khi kích hoạt gửi email duyệt đơn:', emailErr.message);
@@ -96,12 +95,11 @@ async function rejectRequest(requestId, adminId, reason) {
     if (studentInfo && studentInfo.user) {
       const targetEmail = studentInfo.user.email; 
 
-      emailService.sendRejectionEmail(
-        targetEmail, 
-        studentInfo.fullName, 
-        request.requestCode, 
-        reason || 'Không đủ điều kiện mượn'
-      );
+      await emailService.sendDynamicEmail('request_rejected', targetEmail, {
+        name: studentInfo.fullName,
+        request_code: request.requestCode,
+        reason: reason || 'Không đủ điều kiện mượn'
+      });
     }
   } catch (emailErr) {
     console.error('Lỗi khi kích hoạt gửi email từ chối:', emailErr.message);

@@ -1,46 +1,55 @@
-const { borrowRequests } = require('../models/mockData');
-const equipmentService = require('../services/equipment.service');
+const borrowRequestService = require('../services/borrowRequests.service');
 
-function getBorrowRequests(_req, res) {
-  res.json(borrowRequests);
+async function getBorrowRequests(req, res) {
+  try {
+    const { status, page, limit } = req.query;
+    const result = await borrowRequestService.listBorrowRequests({ status, page, limit });
+    res.json(result);
+  } catch (error) {
+    console.error('getBorrowRequests error:', error.message);
+    res.status(500).json({ message: 'Failed to load borrow requests' });
+  }
 }
 
-function getMyBorrowRequests(req, res) {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ message: 'Unauthenticated' });
-  res.json(borrowRequests.filter((item) => String(item.studentId) === String(userId)));
+async function getMyBorrowRequests(req, res) {
+  try {
+    const { status, page, limit } = req.query;
+    const result = await borrowRequestService.listBorrowRequests({
+      studentId: req.user.id,
+      status,
+      page,
+      limit
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('getMyBorrowRequests error:', error.message);
+    res.status(500).json({ message: 'Failed to load borrow requests' });
+  }
 }
 
 async function createBorrowRequest(req, res) {
   try {
-    const equipment = await equipmentService.getEquipmentById(req.body.deviceId);
-    if (!equipment) {
-      return res.status(404).json({ message: 'Device not found' });
+    const { equipmentId, quantity, borrowDate, returnDate, purpose, eventName } = req.body;
+
+    if (!equipmentId || !borrowDate || !returnDate) {
+      return res.status(400).json({ message: 'Thieu truong bat buoc: equipmentId, borrowDate, returnDate' });
     }
 
-    if (equipment.availableQuantity < 1) {
-      return res.status(400).json({ message: 'Device is not available for borrowing' });
-    }
+    const request = await borrowRequestService.createBorrowRequest({
+      studentId: req.user.id,
+      equipmentId,
+      quantity: Number(quantity || 1),
+      borrowDate,
+      returnDate,
+      purpose,
+      eventName
+    });
 
-    const userId = req.user?.id || 'u1';
-    const userName = req.user?.fullName || 'Nguyen Van A';
-
-    const newRequest = {
-      id: `br${Date.now()}`,
-      studentId: String(userId),
-      studentName: userName,
-      deviceId: equipment.id,
-      deviceName: equipment.name,
-      quantity: Number(req.body.quantity || 1),
-      borrowDate: req.body.borrowDate,
-      returnDate: req.body.returnDate,
-      status: 'pending',
-      note: req.body.note
-    };
-
-    borrowRequests.unshift(newRequest);
-    res.status(201).json(newRequest);
+    res.status(201).json(request);
   } catch (error) {
+    if (error.status === 400 || error.status === 403 || error.status === 404) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error('createBorrowRequest error:', error.message);
     res.status(500).json({ message: 'Failed to create borrow request' });
   }
@@ -48,55 +57,48 @@ async function createBorrowRequest(req, res) {
 
 async function approveBorrowRequest(req, res) {
   try {
-    const request = borrowRequests.find((item) => item.id === req.params.id);
-
-    if (!request) {
-      res.status(404).json({ message: 'Borrow request not found' });
-      return;
-    }
-
-    const equipment = await equipmentService.getEquipmentById(request.deviceId);
-    if (!equipment) {
-      res.status(404).json({ message: 'Device not found' });
-      return;
-    }
-
-    if (equipment.availableQuantity < request.quantity) {
-      res.status(400).json({ message: 'Not enough device quantity' });
-      return;
-    }
-
-    request.status = 'borrowed';
+    const request = await borrowRequestService.approveBorrowRequestService(req.params.id, req.user.id);
     res.json(request);
   } catch (error) {
+    if (error.status === 404) return res.status(404).json({ message: error.message });
     console.error('approveBorrowRequest error:', error.message);
     res.status(500).json({ message: 'Failed to approve borrow request' });
   }
 }
 
-function rejectBorrowRequest(req, res) {
-  const request = borrowRequests.find((item) => item.id === req.params.id);
-
-  if (!request) {
-    res.status(404).json({ message: 'Borrow request not found' });
-    return;
+async function rejectBorrowRequest(req, res) {
+  try {
+    const { reason } = req.body;
+    const request = await borrowRequestService.rejectBorrowRequestService(req.params.id, req.user.id, reason);
+    res.json(request);
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ message: error.message });
+    console.error('rejectBorrowRequest error:', error.message);
+    res.status(500).json({ message: 'Failed to reject borrow request' });
   }
-
-  request.status = 'rejected';
-  res.json(request);
 }
 
-function markReturned(req, res) {
-  const request = borrowRequests.find((item) => item.id === req.params.id);
-
-  if (!request) {
-    res.status(404).json({ message: 'Borrow request not found' });
-    return;
+async function handoverBorrowRequest(req, res) {
+  try {
+    const request = await borrowRequestService.handoverBorrowRequest(req.params.id, req.user.id);
+    res.json(request);
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ message: error.message });
+    console.error('handoverBorrowRequest error:', error.message);
+    res.status(500).json({ message: 'Failed to handover' });
   }
+}
 
-  request.status = 'returned';
-  request.actualReturnDate = new Date().toISOString().slice(0, 10);
-  res.json(request);
+async function markReturned(req, res) {
+  try {
+    const { returnCondition } = req.body;
+    const request = await borrowRequestService.returnBorrowRequest(req.params.id, req.user.id, returnCondition);
+    res.json(request);
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ message: error.message });
+    console.error('markReturned error:', error.message);
+    res.status(500).json({ message: 'Failed to return' });
+  }
 }
 
 module.exports = {
@@ -105,5 +107,6 @@ module.exports = {
   createBorrowRequest,
   approveBorrowRequest,
   rejectBorrowRequest,
+  handoverBorrowRequest,
   markReturned
 };

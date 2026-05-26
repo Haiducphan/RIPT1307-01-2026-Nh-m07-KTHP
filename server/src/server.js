@@ -11,6 +11,9 @@ const { syncDatabase } = require('./config/syncDatabase');
 const app = express();
 const port = Number(process.env.PORT || 4000);
 
+const { startEmailScheduler } = require('./services/emailScheduler.service');
+startEmailScheduler();
+
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:8000' }));
 app.use(express.json());
 

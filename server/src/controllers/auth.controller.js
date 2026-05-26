@@ -1,7 +1,7 @@
 // login-dang nhap
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const User = require('../models/user.model');
+const User = require('../models/user.models');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'borrow-equipment-secret';
 

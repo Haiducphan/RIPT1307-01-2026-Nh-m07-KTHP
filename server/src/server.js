@@ -2,6 +2,8 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const express = require('express');
+require('./models/associations');
+
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 

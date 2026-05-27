@@ -8,17 +8,18 @@ import type { BorrowRequest } from '@/types';
 
 export default function AdminRequestsPage() {
   const { data, loading, refresh } = useAsyncData(getBorrowRequests);
+  const requests = data?.data ?? [];
 
   const handleApprove = async (id: string) => {
     await approveBorrowRequest(id);
     message.success('Da duyet yeu cau');
-    refresh();
+    void refresh();
   };
 
   const handleReject = async (id: string) => {
     await rejectBorrowRequest(id);
     message.success('Da tu choi yeu cau');
-    refresh();
+    void refresh();
   };
 
   return (
@@ -28,10 +29,11 @@ export default function AdminRequestsPage() {
         <Table<BorrowRequest>
           rowKey="id"
           loading={loading}
-          dataSource={data || []}
+          dataSource={requests}
           columns={[
-            { title: 'Sinh vien', dataIndex: 'studentName' },
-            { title: 'Thiet bi', dataIndex: 'deviceName' },
+            { title: 'Ma don', dataIndex: 'requestCode' },
+            { title: 'Student ID', dataIndex: 'studentId' },
+            { title: 'Equipment ID', dataIndex: 'equipmentId' },
             { title: 'So luong', dataIndex: 'quantity' },
             { title: 'Ngay muon', dataIndex: 'borrowDate', render: formatDate },
             { title: 'Ngay tra', dataIndex: 'returnDate', render: formatDate },
@@ -40,10 +42,10 @@ export default function AdminRequestsPage() {
               title: 'Thao tac',
               render: (_, record) => (
                 <Space>
-                  <Button size="small" type="primary" onClick={() => handleApprove(record.id)}>
+                  <Button size="small" type="primary" onClick={() => handleApprove(String(record.id))}>
                     Duyet
                   </Button>
-                  <Button size="small" danger onClick={() => handleReject(record.id)}>
+                  <Button size="small" danger onClick={() => handleReject(String(record.id))}>
                     Tu choi
                   </Button>
                 </Space>

@@ -1,7 +1,10 @@
-const { Op } = require('sequelize');
-const BorrowRequest = require('../models/borrowRequest.models');
+﻿const { Op } = require('sequelize');
+const BorrowRequest = require('../models/borrowRequest.model');
 const Equipment = require('../models/equipment.models');
 const User = require('../models/user.models');
+const Student = require('../models/student.model');
+const EquipmentImage = require('../models/equipmentImage.model');
+const { sendEmail } = require('./email.service');
 
 const TIER_MIN_SCORE = { S: 90, A: 80, B: 65, C: 50 };
 
@@ -53,38 +56,42 @@ async function createBorrowRequest({ studentId, equipmentId, quantity, borrowDat
   return request;
 }
 
-async function listBorrowRequests({ studentId, status, page = 1, limit = 20 } = {}) {
+async function listBorrowRequests({ userId, studentId, status, page = 1, limit = 20 } = {}) {
   const where = {};
-  if (studentId) where.studentId = studentId;
+
+  if (userId) {
+    const student = await Student.findOne({ where: { userId } });
+    if (!student) return { total: 0, page: Number(page), totalPages: 0, data: [] };
+    where.studentId = student.id;
+  } else if (studentId) {
+    where.studentId = studentId;
+  }
+
   if (status) where.status = status;
-  console.log('where:', where);
 
   const offset = (page - 1) * limit;
   const { count, rows } = await BorrowRequest.findAndCountAll({
     where,
+    include: [
+      {
+        model: Equipment,
+        as: 'equipment',
+        attributes: ['id', 'name', 'tier'],
+        include: [
+          {
+            model: EquipmentImage,
+            as: 'images',
+            attributes: ['id', 'equipmentId', 'imageUrl', 'isPrimary', 'sortOrder']
+          }
+        ]
+      }
+    ],
     order: [['created_at', 'DESC']],
     limit: Number(limit),
     offset
   });
- console.log('count:', count, 'rows:', rows.length); // thêm dòng này
+
   return { total: count, page: Number(page), totalPages: Math.ceil(count / limit), data: rows };
-}
-
-async function handoverBorrowRequest(id, adminId) {
-  const request = await BorrowRequest.findOne({ where: { id, status: 'approved' } });
-  if (!request) {
-    const err = new Error('Khong tim thay don hoac don chua duoc duyet');
-    err.status = 404;
-    throw err;
-  }
-
-  await request.update({
-    status: 'borrowing',
-    handedOverAt: new Date(),
-    handedOverBy: adminId
-  });
-
-  return request;
 }
 
 async function returnBorrowRequest(id, adminId, returnCondition) {
@@ -120,4 +127,73 @@ async function returnBorrowRequest(id, adminId, returnCondition) {
   return request;
 }
 
-module.exports = { createBorrowRequest, listBorrowRequests, handoverBorrowRequest, returnBorrowRequest };
+async function approveBorrowRequestService(id, adminId) {
+  const request = await BorrowRequest.findOne({ where: { id, status: 'pending' } });
+  if (!request) {
+    const err = new Error('Khong tim thay don hoac don khong o trang thai pending');
+    err.status = 404;
+    throw err;
+  }
+
+  await request.update({
+    status: 'approved',
+    approvedBy: adminId,
+    approvedAt: new Date()
+  });
+
+  const student = await User.findByPk(request.studentId);
+  if (student) {
+    await sendEmail({
+      userId: student.id,
+      borrowRequestId: request.id,
+      templateCode: 'request_approved',
+      toEmail: student.email,
+      variables: {
+        email: student.email,
+        request_code: request.requestCode
+      }
+    });
+  }
+
+  return request;
+}
+
+async function rejectBorrowRequestService(id, adminId, reason) {
+  const request = await BorrowRequest.findOne({ where: { id, status: 'pending' } });
+  if (!request) {
+    const err = new Error('Khong tim thay don hoac don khong o trang thai pending');
+    err.status = 404;
+    throw err;
+  }
+
+  await request.update({
+    status: 'rejected',
+    approvedBy: adminId,
+    approvedAt: new Date()
+  });
+
+  const student = await User.findByPk(request.studentId);
+  if (student) {
+    await sendEmail({
+      userId: student.id,
+      borrowRequestId: request.id,
+      templateCode: 'request_rejected',
+      toEmail: student.email,
+      variables: {
+        email: student.email,
+        request_code: request.requestCode,
+        reason: reason || 'Khong co ly do'
+      }
+    });
+  }
+
+  return request;
+}
+
+module.exports = {
+  createBorrowRequest,
+  listBorrowRequests,
+  returnBorrowRequest,
+  approveBorrowRequestService,
+  rejectBorrowRequestService
+};

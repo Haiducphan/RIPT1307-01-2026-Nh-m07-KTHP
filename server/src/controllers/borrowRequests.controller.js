@@ -14,9 +14,12 @@ async function getBorrowRequests(req, res) {
 async function getMyBorrowRequests(req, res) {
   console.log('user id:', req.user.id);
   try {
+    const userId = req.user?.id ?? req.user?.userId;
+    if (!userId) return res.status(401).json({ message: 'Unauthenticated' });
+
     const { status, page, limit } = req.query;
     const result = await borrowRequestService.listBorrowRequests({
-      studentId: req.user.id,
+      userId,
       status,
       page,
       limit

@@ -103,7 +103,22 @@ async function rejectBorrowRequest(req, res) {
   }
 }
 
-// Bàn giao, ghi nhận trả
+// Bàn giao thiết bị cho sinh viên
+async function handoverBorrowRequest(req, res) {
+  try {
+    const adminId = req.user.id;
+    // Gọi hàm handoverRequest từ Service
+    const request = await borrowRequestService.handoverRequest(req.params.id, adminId);
+    
+    res.json({ message: 'Ghi nhận bàn giao thiết bị thành công', request });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('handoverBorrowRequest error:', error.message);
+    res.status(500).json({ message: 'Lỗi server khi bàn giao thiết bị' });
+  }
+}
+
+// Ghi nhận trả
 async function markReturned(req, res) {
   try {
     const request = await BorrowRequest.findByPk(req.params.id);
@@ -129,5 +144,6 @@ module.exports = {
   createBorrowRequest,
   approveBorrowRequest,
   rejectBorrowRequest,
+  handoverBorrowRequest,
   markReturned
 };

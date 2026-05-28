@@ -108,4 +108,24 @@ async function rejectRequest(requestId, adminId, reason) {
   return request;
 }
 
-module.exports = { approveRequest, rejectRequest };
+// Xử lý bàn giao thiết bị cho sinh viên
+async function handoverRequest(requestId, adminId) {
+  const request = await BorrowRequest.findOne({ 
+    where: { id: requestId, status: 'approved' } 
+  });
+
+  if (!request) {
+    throw { status: 404, message: 'Không tìm thấy đơn mượn hoặc đơn chưa được duyệt/đã bàn giao' };
+  }
+
+  // Cập nhật trạng thái thành Đang mượn (borrowing)
+  await request.update({
+    status: 'borrowing',
+    handedOverAt: new Date(),
+    handedOverBy: adminId
+  });
+
+  return request;
+}
+
+module.exports = { approveRequest, rejectRequest, handoverRequest };

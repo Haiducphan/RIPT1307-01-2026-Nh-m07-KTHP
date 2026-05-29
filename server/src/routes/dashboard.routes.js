@@ -8,6 +8,6 @@ router.use(authenticateJWT, authorizeRole('admin'));
 router.get('/devices', dashboardController.getDeviceStats);
 router.get('/requests', dashboardController.getRequestStats);
 router.get('/students', dashboardController.getStudentStats);
-router.get('/time', dashboardController.getTimeStats);
+router.get('/time-trend', dashboardController.getTimeStats);
 
 module.exports = router;

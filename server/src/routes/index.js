@@ -4,6 +4,10 @@ const borrowRequestRoutes = require('./borrowRequests.routes');
 const equipmentRoutes = require('./equipment.routes');
 const categoryRoutes = require('./category.routes');
 const dashboardRoutes = require('./dashboard.routes');
+const studentRoutes = require('./student.routes');
+const notificationRoutes = require('./notification.routes');
+const systemSettingRoutes = require('./systemSetting.routes');
+const emailTemplateRoutes = require('./emailTemplate.routes');
 
 const router = Router();
 
@@ -12,7 +16,10 @@ router.use('/equipment', equipmentRoutes);
 router.use('/borrow-requests', borrowRequestRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/stats', dashboardRoutes);
-
+router.use('/students', studentRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/settings', systemSettingRoutes);
+router.use('/email-templates', emailTemplateRoutes);
 
 // Test thử Cronjob
 const { runDailyTasks } = require('../services/cron.service');

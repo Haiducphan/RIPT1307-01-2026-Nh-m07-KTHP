@@ -1,18 +1,147 @@
+const { Op } = require('sequelize');
+const TrustScoreLog = require('../models/trustScoreLog.model');
+const { calculateRank } = require('../utils/trustScore.util');
 const BorrowRequest = require('../models/borrowRequest.model');
 const Equipment = require('../models/equipment.model');
 const Student = require('../models/student.model'); 
 const User = require('../models/user.model');
 const sequelize = require('../config/database');
-
 const emailService = require('./email.service');
+const notificationService = require('./notification.service');
+const auditLogService = require('./auditLog.service');
 
-// Xử lý xét duyệt đơn
+
+// Lấy danh sách toàn bộ đơn mượn kèm phân trang & bộ lọc trạng thái (Dành cho Admin)
+async function getBorrowRequests({ page = 1, limit = 10, status }) {
+  const parsedPage = parseInt(page);
+  const parsedLimit = parseInt(limit);
+  const offset = (parsedPage - 1) * parsedLimit;
+
+  const whereClause = {};
+  if (status) {
+    whereClause.status = status;
+  }
+
+  const { count, rows } = await BorrowRequest.findAndCountAll({
+    where: whereClause,
+    include: [
+      { model: Equipment, as: 'equipment' },
+      { model: Student, as: 'student', attributes: ['fullName', 'studentCode', 'className'] }
+    ],
+    order: [['created_at', 'DESC']],
+    limit: parsedLimit,
+    offset: offset
+  });
+
+  return {
+    totalItems: count,
+    totalPages: Math.ceil(count / parsedLimit),
+    currentPage: parsedPage,
+    limit: parsedLimit,
+    data: rows
+  };
+}
+
+// Lấy danh sách đơn mượn cá nhân kèm phân trang & bộ lọc trạng thái (Dành cho Sinh viên)
+async function getMyBorrowRequests(userId, { page = 1, limit = 10, status }) {
+  const student = await Student.findOne({ where: { userId: userId } });
+  if (!student) {
+    throw { status: 403, message: 'Không tìm thấy hồ sơ sinh viên hợp lệ' };
+  }
+
+  const parsedPage = parseInt(page);
+  const parsedLimit = parseInt(limit);
+  const offset = (parsedPage - 1) * parsedLimit;
+
+  const whereClause = { studentId: student.id };
+  if (status) {
+    whereClause.status = status;
+  }
+
+  const { count, rows } = await BorrowRequest.findAndCountAll({
+    where: whereClause,
+    include: [{ model: Equipment, as: 'equipment' }],
+    order: [['created_at', 'DESC']],
+    limit: parsedLimit,
+    offset: offset
+  });
+
+  return {
+    totalItems: count,
+    totalPages: Math.ceil(count / parsedLimit),
+    currentPage: parsedPage,
+    limit: parsedLimit,
+    data: rows
+  };
+}
+
+// Tạo đơn mượn
+async function createRequest(userId, requestData) {
+  const { deviceId, quantity, borrowDate, returnDate, purpose } = requestData;
+
+  const student = await Student.findOne({ where: { userId: userId } });
+  if (!student) {
+    throw { status: 403, message: 'Không tìm thấy hồ sơ sinh viên hợp lệ' };
+  }
+
+  // Kiểm tra khoá tài khoản
+  if (student.isPermanentlyLocked) {
+    throw { status: 403, message: 'Tài khoản của bạn đã bị khoá mượn đồ vĩnh viễn do ý thức quá kém!' };
+  }
+
+  if (student.borrowLocked) {
+    if (student.borrowLockUntil) {
+      const now = new Date();
+      const lockUntilDate = new Date(student.borrowLockUntil);
+
+      if (now < lockUntilDate) {
+        throw { status: 403, message: `Tài khoản đang bị phạt khoá. Bạn có thể mượn lại sau thời điểm: ${lockUntilDate.toLocaleString()}` };
+      } else {
+        await student.update({ borrowLocked: false, borrowLockUntil: null, borrowLockReason: null });
+      }
+    } 
+    else {
+      throw { status: 403, message: 'Tài khoản của bạn đang bị khoá. Vui lòng liên hệ Admin!' };
+    }
+  }
+
+  const equipment = await Equipment.findOne({ where: { id: deviceId, isActive: true } });
+  if (!equipment) {
+    throw { status: 404, message: 'Không tìm thấy thiết bị' };
+  }
+
+  if (equipment.availableQuantity < (quantity || 1)) {
+    throw { status: 400, message: 'Thiết bị không đủ số lượng sẵn có' };
+  }
+
+  const newRequest = await BorrowRequest.create({
+    requestCode: `REQ-${Date.now()}`,
+    studentId: student.id,
+    equipmentId: equipment.id,
+    quantity: quantity || 1,
+    borrowDate,
+    returnDate,
+    purpose,
+    status: 'pending' 
+  });
+
+  return newRequest;
+}
+
+// Xét duyệt đơn mượn
 async function approveRequest(requestId, adminId) {
   const transaction = await sequelize.transaction();
 
   try {
     const request = await BorrowRequest.findOne({ 
       where: { id: requestId, status: 'pending' },
+      include: [
+        { 
+          model: Student, 
+          as: 'student', 
+          include: [{ model: User, as: 'user' }]
+        }
+      ],
       transaction 
     });
 
@@ -44,21 +173,37 @@ async function approveRequest(requestId, adminId) {
       pickupDeadline: pickupDeadline
     }, { transaction });
 
+    // Tạo thông báo
+    await notificationService.createNotification({
+      userId: request.student.userId,
+      borrowRequestId: request.id,
+      type: 'request_approved',
+      title: 'Đơn mượn đồ đã được duyệt',
+      message: `Đơn mượn thiết bị của bạn đã được duyệt. Vui lòng đến lấy đồ trước ${pickupDeadline.toLocaleString('vi-VN')}.`
+    }, transaction);
+
+    // Ghi Log Admin
+    await auditLogService.logAdminAction({
+      userId: adminId,
+      action: 'approve_request',
+      entityType: 'borrow_request',
+      entityId: request.id,
+      oldValue: { status: 'pending' },
+      newValue: { status: 'approved', pickupDeadline }
+    }, transaction);
+
     await transaction.commit();
 
-    // Gửi email đến sinh viên
+    // Dù gửi mail lỗi thì DB vẫn lưu duyệt đơn thành công (không phải lỗi)
     try {
-      const studentInfo = await Student.findByPk(request.studentId, {
-        include: [{ model: User, as: 'user' }]
-      });
-      
-      if (studentInfo && studentInfo.user) {
-        const targetEmail = studentInfo.user.email; 
-
-        await emailService.sendDynamicEmail('request_approved', targetEmail, {
-          name: studentInfo.fullName,
-          request_code: request.requestCode
-        });
+      if (request.student && request.student.user && request.student.user.email) {
+        await emailService.sendDynamicEmail(
+          'request_approved', 
+          request.student.user.email, 
+          { name: request.student.fullName, request_code: request.requestCode },
+          request.student.userId,
+          request.id
+        );
       }
     } catch (emailErr) {
       console.error('Lỗi khi kích hoạt gửi email duyệt đơn:', emailErr.message);
@@ -71,7 +216,7 @@ async function approveRequest(requestId, adminId) {
   }
 }
 
-//  Xử lý từ chối đơn
+// Từ chối duyệt đơn
 async function rejectRequest(requestId, adminId, reason) {
   const request = await BorrowRequest.findOne({ where: { id: requestId, status: 'pending' } });
   
@@ -86,20 +231,20 @@ async function rejectRequest(requestId, adminId, reason) {
     rejectionReason: reason || 'Không đủ điều kiện mượn'
   });
 
-  // Gửi email đến sinh viên
   try {
-    const studentInfo = await Student.findByPk(request.studentId, {
-      include: [{ model: User, as: 'user' }]
-    });
-    
+    const studentInfo = await Student.findByPk(request.studentId, { include: [{ model: User, as: 'user' }] });
     if (studentInfo && studentInfo.user) {
-      const targetEmail = studentInfo.user.email; 
-
-      await emailService.sendDynamicEmail('request_rejected', targetEmail, {
-        name: studentInfo.fullName,
-        request_code: request.requestCode,
-        reason: reason || 'Không đủ điều kiện mượn'
-      });
+      await emailService.sendDynamicEmail(
+        'request_rejected', 
+        studentInfo.user.email, 
+        { 
+          name: studentInfo.fullName, 
+          request_code: request.requestCode,
+          reason: reason || 'Không đủ điều kiện mượn'
+        },
+        request.student.userId,
+        request.id
+      );
     }
   } catch (emailErr) {
     console.error('Lỗi khi kích hoạt gửi email từ chối:', emailErr.message);
@@ -108,24 +253,208 @@ async function rejectRequest(requestId, adminId, reason) {
   return request;
 }
 
-// Xử lý bàn giao thiết bị cho sinh viên
+// Bàn giao thiết bị cho sinh viên
 async function handoverRequest(requestId, adminId) {
-  const request = await BorrowRequest.findOne({ 
-    where: { id: requestId, status: 'approved' } 
-  });
+  const transaction = await sequelize.transaction();
 
-  if (!request) {
-    throw { status: 404, message: 'Không tìm thấy đơn mượn hoặc đơn chưa được duyệt/đã bàn giao' };
+  try {
+    const request = await BorrowRequest.findOne({ 
+      where: { id: requestId, status: 'approved' },
+      transaction
+    });
+
+    if (!request) {
+      throw { status: 404, message: 'Không tìm thấy đơn mượn hoặc đơn chưa được duyệt/đã bàn giao' };
+    }
+
+    const equipment = await Equipment.findByPk(request.equipmentId, { transaction });
+    await equipment.increment('borrowingQuantity', { by: request.quantity, transaction });
+
+    await request.update({
+      status: 'borrowing',
+      handedOverAt: new Date(),
+      handedOverBy: adminId
+    }, { transaction });
+
+    await transaction.commit();
+    return request;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
   }
-
-  // Cập nhật trạng thái thành Đang mượn (borrowing)
-  await request.update({
-    status: 'borrowing',
-    handedOverAt: new Date(),
-    handedOverBy: adminId
-  });
-
-  return request;
 }
 
-module.exports = { approveRequest, rejectRequest, handoverRequest };
+// Ghi nhận trả đồ, tính điểm, cập nhật kho
+async function returnRequest(requestId, adminId, returnCondition, damageNote) {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const request = await BorrowRequest.findOne({ 
+      where: { id: requestId, status: { [Op.in]: ['borrowing', 'overdue'] } },
+      transaction 
+    });
+
+    if (!request) {
+      throw { status: 404, message: 'Không tìm thấy đơn mượn hoặc thiết bị chưa được bàn giao' };
+    }
+
+    const equipment = await Equipment.findByPk(request.equipmentId, { transaction });
+    const student = await Student.findByPk(request.studentId, { transaction });
+
+    // Trừ kho đang mượn
+    await equipment.decrement('borrowingQuantity', { by: request.quantity, transaction });
+
+    // Phân loại kho trả về
+    if (returnCondition === 'perfect' || returnCondition === 'minor_damage') {
+      await equipment.increment('availableQuantity', { by: request.quantity, transaction });
+    } 
+    else if (returnCondition === 'major_damage' || returnCondition === 'lost') {
+      await equipment.increment('brokenQuantity', { by: request.quantity, transaction });
+    }
+
+    let scoreDelta = 0;
+    let reason = '';
+    let newStreak = student.goodReturnStreak;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expectedReturnDate = new Date(request.returnDate);
+    const isOntime = today <= expectedReturnDate && request.status !== 'overdue';
+
+    if (returnCondition === 'minor_damage') {
+      scoreDelta = -10; reason = 'minor_damage'; newStreak = 0;
+    } else if (returnCondition === 'major_damage' || returnCondition === 'lost') {
+      scoreDelta = -30; reason = 'major_damage'; newStreak = 0;
+    } else if (returnCondition === 'perfect' && isOntime) {
+      scoreDelta = 2; reason = 'return_ontime'; newStreak += 1;
+    } else {
+      newStreak = 0;
+    }
+
+    if (newStreak === 3) { scoreDelta += 5; reason = 'streak_3'; }
+    if (newStreak === 5) { scoreDelta += 7; reason = 'streak_5'; }
+
+    let newScore = student.trustScore + scoreDelta;
+    if (newScore > 100) newScore = 100;
+    if (newScore < 0) newScore = 0;
+    const newRank = calculateRank(newScore);
+
+    await student.update({
+      trustScore: newScore,
+      trustRank: newRank,
+      goodReturnStreak: newStreak,
+      totalLate: (!isOntime) ? student.totalLate + 1 : student.totalLate
+    }, { transaction });
+
+    if (scoreDelta !== 0) {
+      await TrustScoreLog.create({
+        studentId: student.id,
+        borrowRequestId: request.id,
+        delta: scoreDelta,
+        scoreBefore: student.trustScore,
+        scoreAfter: newScore,
+        rankBefore: student.trustRank,
+        rankAfter: newRank,
+        reason: reason,
+        note: damageNote,
+        createdBy: adminId
+      }, { transaction });
+    }
+
+    const finalStatus = isOntime ? 'returned_ontime' : 'returned_late';
+    await request.update({
+      status: finalStatus,
+      actualReturnDate: new Date(),
+      returnCondition: returnCondition,
+      returnCheckedBy: adminId,
+      damageNote: damageNote,
+      trustScoreDelta: request.trustScoreDelta + scoreDelta
+    }, { transaction });
+
+    await transaction.commit();
+    return request;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
+// Sinh viên chủ động huỷ đơn
+async function cancelRequest(requestId, studentId) {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const request = await BorrowRequest.findOne({ 
+      where: { id: requestId, studentId: studentId },
+      transaction 
+    });
+
+    if (!request) {
+      throw { status: 404, message: 'Không tìm thấy đơn mượn của bạn' };
+    }
+
+    if (!['pending', 'approved'].includes(request.status)) {
+      throw { status: 400, message: 'Bạn chỉ có thể huỷ đơn khi đang chờ duyệt hoặc đã duyệt' };
+    }
+
+    const student = await Student.findByPk(studentId, { transaction });
+    let scoreDelta = 0;
+    let reason = '';
+
+    if (request.status === 'pending') {
+      scoreDelta = 0;
+    } 
+    else if (request.status === 'approved') {
+      scoreDelta = -3;
+      reason = 'cancel_approved';
+      
+      const equipment = await Equipment.findByPk(request.equipmentId, { transaction });
+      await equipment.increment('availableQuantity', { by: request.quantity, transaction });
+    }
+
+    if (scoreDelta !== 0) {
+      let newScore = student.trustScore + scoreDelta;
+      if (newScore < 0) newScore = 0;
+      const newRank = calculateRank(newScore);
+
+      await student.update({ 
+        trustScore: newScore, 
+        trustRank: newRank 
+      }, { transaction });
+
+      await TrustScoreLog.create({
+        studentId: student.id,
+        borrowRequestId: request.id,
+        delta: scoreDelta,
+        scoreBefore: student.trustScore,
+        scoreAfter: newScore,
+        rankBefore: student.trustRank,
+        rankAfter: newRank,
+        reason: reason,
+        createdBy: 1 
+      }, { transaction });
+    }
+
+    await request.update({
+      status: 'cancelled',
+      trustScoreDelta: scoreDelta
+    }, { transaction });
+
+    await transaction.commit();
+    return request;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
+module.exports = { 
+  getBorrowRequests,
+  getMyBorrowRequests,
+  createRequest, 
+  approveRequest, 
+  rejectRequest, 
+  handoverRequest, 
+  returnRequest, 
+  cancelRequest 
+};

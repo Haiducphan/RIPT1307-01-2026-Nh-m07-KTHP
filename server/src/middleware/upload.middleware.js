@@ -39,4 +39,4 @@ const uploadEquipmentImages = multer({
 });
 
 
-module.exports = uploadEquipmentImages.array('images', 5);
+module.exports = uploadEquipmentImages;

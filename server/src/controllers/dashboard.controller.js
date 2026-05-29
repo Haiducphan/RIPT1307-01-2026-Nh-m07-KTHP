@@ -62,6 +62,4 @@ async function getTimeStats(req, res) {
   }
 }
 
-module.exports = {
-  getDeviceStats, getRequestStats, getStudentStats, getTimeStats
-};
+module.exports = { getDeviceStats, getRequestStats, getStudentStats, getTimeStats };

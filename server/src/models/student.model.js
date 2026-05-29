@@ -11,7 +11,7 @@ const Student = sequelize.define('Student', {
   className: { type: DataTypes.STRING(100) },
   trustScore: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 100 },
   trustRank: {
-    type: DataTypes.ENUM('diamond', 'gold', 'silver', 'bronze', 'pebble'),
+    type: DataTypes.ENUM('diamond', 'gold', 'silver', 'bronze', 'pebble'), // Của bạn dùng 'pebble'
     allowNull: false,
     defaultValue: 'diamond'
   },
@@ -28,7 +28,8 @@ const Student = sequelize.define('Student', {
   underscored: true,
   timestamps: true,
   createdAt: 'created_at',
-  updatedAt: 'updated_at'
+  updatedAt: 'updated_at',
+  
 });
 
 const User = require('./user.model');

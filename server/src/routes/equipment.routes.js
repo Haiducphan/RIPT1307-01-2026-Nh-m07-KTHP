@@ -1,27 +1,13 @@
-const { Router } = require('express');
-const {
-  createDevice,
-  deleteDevice,
-  getDeviceById,
-  getDevices,
-  updateDevice,
-  updateStock
-} = require('../controllers/equipment.controller');
-const {
-  authenticateJWT,
-  authorizeRole,
-  optionalAuthenticateJWT
-} = require('../middleware/auth.middleware');
+const express = require('express');
+const router = express.Router();
+const equipmentController = require('../controllers/equipment.controller');
+const { authenticateJWT, authorizeRole, optionalAuthenticateJWT } = require('../middleware/auth.middleware');
 const uploadEquipmentImages = require('../middleware/upload.middleware');
 
-const router = Router();
-
-router.get('/', optionalAuthenticateJWT, getDevices);
-router.get('/:id', optionalAuthenticateJWT, getDeviceById);
-router.post('/', authenticateJWT, authorizeRole('admin'), uploadEquipmentImages, createDevice);
-router.put('/:id', authenticateJWT, authorizeRole('admin'), uploadEquipmentImages, updateDevice);
-router.patch('/:id/stock', authenticateJWT, authorizeRole('admin'), updateStock);
-router.delete('/:id', authenticateJWT, authorizeRole('admin'), deleteDevice);
-
+router.get('/', optionalAuthenticateJWT, equipmentController.getDevices);
+router.get('/:id', optionalAuthenticateJWT, equipmentController.getDeviceById);
+router.post('/', authenticateJWT, authorizeRole('admin'), uploadEquipmentImages.array('images', 5), equipmentController.createDevice);
+router.delete('/:id', authenticateJWT, authorizeRole('admin'), equipmentController.deleteDevice);
+router.patch('/:id/stock', authenticateJWT, authorizeRole('admin'), equipmentController.updateStock);
 
 module.exports = router;

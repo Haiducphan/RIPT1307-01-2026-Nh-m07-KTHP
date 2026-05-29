@@ -1,128 +1,86 @@
 const equipmentService = require('../services/equipment.service');
 
-// Lấy thiết bị
+// Lấy danh sách thiết bị
 async function getDevices(req, res) {
   try {
-    const includeInactive =
-      req.user?.role === 'admin' && String(req.query.includeInactive) === 'true';
-
+    const includeInactive = req.user?.role === 'admin' && String(req.query.includeInactive) === 'true';
     const { tier, conditionStatus, page, limit } = req.query;
-
-    const result = await equipmentService.listEquipment({
-      tier,
-      conditionStatus,
-      page,
-      limit,
-      includeInactive
-    });
-
+    const result = await equipmentService.listEquipment(
+      { tier, conditionStatus, page, limit, includeInactive }
+    );
     return res.json(result);
   } catch (error) {
-    console.error('getDevices error:', error.message);
-    return res.status(500).json({ message: 'Failed to load devices' });
+    return res.status(500).json({ message: 'Lỗi khi tải danh sách thiết bị' });
   }
 }
 
-// Lấy thiết bị theo ID
+// Lấy chi tiết một thiết bị
 async function getDeviceById(req, res) {
   try {
-    const includeDeleted =
-      req.user?.role === 'admin' && String(req.query.includeDeleted) === 'true';
-
+    const includeDeleted = req.user?.role === 'admin' && String(req.query.includeDeleted) === 'true';
     const equipment = await equipmentService.getEquipmentById(req.params.id, { includeDeleted });
-
-    if (!equipment) {
-      return res.status(404).json({ message: 'Device not found' });
-    }
-
+    if (!equipment) return res.status(404).json({ message: 'Không tìm thấy thiết bị' });
     return res.json(equipment);
   } catch (error) {
-    console.error('getDeviceById error:', error.message);
-    return res.status(500).json({ message: 'Failed to load device' });
+    return res.status(500).json({ message: 'Lỗi khi tải chi tiết thiết bị' });
   }
 }
 
-// Tạo thiết bị
+// Thêm thiết bị mới
 async function createDevice(req, res) {
   try {
-    if (!req.user) {
-      return res.status(401).json({ message: 'Unauthorized: User not found' });
-    }
-
+    const files = req.files || [];
     const payload = {
       ...req.body,
       createdBy: req.user.id
     };
-    
-    const files = req.files || [];
 
-    const equipment = await equipmentService.createEquipment(payload, files);
-    
-    return res.status(201).json(equipment);
+    const newEquipment = await equipmentService.createEquipment(payload, files);
+    res.status(201).json({ message: 'Thêm thiết bị thành công', data: newEquipment });
   } catch (error) {
-    if (error.status === 400) {
-      return res.status(400).json({ message: error.message });
-    }
+    if (error.status) return res.status(error.status).json({ message: error.message });
     console.error('createDevice error:', error.message);
-    return res.status(500).json({ message: 'Failed to create device' });
+    res.status(500).json({ message: 'Lỗi khi tạo thiết bị mới' });
   }
 }
 
-// Cập nhật thiết bị
+// Sửa thông tin thiết bị
 async function updateDevice(req, res) {
   try {
     const files = req.files || [];
-    
-    const equipment = await equipmentService.updateEquipment(req.params.id, req.body, files);
-
-    if (!equipment) {
-      return res.status(404).json({ message: 'Device not found' });
-    }
-
-    return res.json(equipment);
+    const equipment = await equipmentService.updateEquipment(req.params.id, req.body, files, req.user.id);
+    if (!equipment) return res.status(404).json({ message: 'Không tìm thấy thiết bị' });
+    return res.json({ message: 'Cập nhật thành công', data: equipment });
   } catch (error) {
-    if (error.status === 400) {
-      return res.status(400).json({ message: error.message });
-    }
-    console.error('updateDevice error:', error.message);
-    return res.status(500).json({ message: 'Failed to update device' });
+    return res.status(500).json({ message: 'Lỗi khi cập nhật thiết bị' });
   }
 }
 
 // Xoá thiết bị
 async function deleteDevice(req, res) {
   try {
-    const equipment = await equipmentService.softDeleteEquipment(req.params.id);
-
-    if (!equipment) {
-      return res.status(404).json({ message: 'Device not found' });
-    }
-
-    return res.json({ success: true, device: equipment });
+    const equipment = await equipmentService.softDeleteEquipment(req.params.id, req.user.id);
+    if (!equipment) return res.status(404).json({ message: 'Không tìm thấy thiết bị' });
+    return res.json({ success: true, message: 'Xóa thiết bị thành công' });
   } catch (error) {
-    console.error('deleteDevice error:', error.message);
-    return res.status(500).json({ message: 'Failed to delete device' });
+    return res.status(500).json({ message: 'Lỗi khi xóa thiết bị' });
   }
 }
 
-// Cập nhật số lượng trong kho
+// Cập nhật số lượng
 async function updateStock(req, res) {
   try {
-    const { totalQuantity, availableQuantity } = req.body;
+    const { totalQuantity } = req.body;
+    if (totalQuantity === undefined) return res.status(400).json({ message: 'Cần nhập totalQuantity' });
 
-    if (totalQuantity === undefined && availableQuantity === undefined) {
-      return res.status(400).json({ message: 'Can nhap totalQuantity hoac availableQuantity' });
-    }
-
-    const equipment = await equipmentService.updateStock(req.params.id, { totalQuantity, availableQuantity });
-    return res.json(equipment);
+    const equipment = await equipmentService.updateStock(req.params.id, { totalQuantity }, req.user.id);
+    return res.json({ message: 'Cập nhật kho thành công', equipment });
   } catch (error) {
-    if (error.status === 400 || error.status === 404) {
-      return res.status(error.status).json({ message: error.message });
-    }
-    console.error('updateStock error:', error.message);
-    return res.status(500).json({ message: 'Failed to update stock' });
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    return res.status(500).json({ message: 'Lỗi khi cập nhật số lượng' });
   }
 }
 
-module.exports = { getDevices, getDeviceById, createDevice, updateDevice, deleteDevice, updateStock };
+module.exports = {
+  getDevices, getDeviceById, createDevice, updateDevice, deleteDevice, updateStock
+};

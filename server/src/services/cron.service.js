@@ -8,6 +8,7 @@ const { calculateRank } = require('../utils/trustScore.util');
 const sequelize = require('../config/database');
 const emailService = require('./email.service');
 
+// cronjob chạy hằng ngày
 async function runDailyTasks() {
   console.log('[CRON] Bắt đầu chạy cỗ máy tuần tra tự động...');
   const now = new Date();
@@ -55,12 +56,18 @@ async function runDailyTasks() {
         }, { transaction });
 
         if (student.user && student.user.email) {
-          await emailService.sendDynamicEmail('trust_point_deducted', student.user.email, {
-            name: student.fullName,
-            request_code: request.requestCode,
-            delta: penalty,
-            reason: 'Không đến nhận thiết bị đúng hạn (Bom hàng)'
-          });
+          await emailService.sendDynamicEmail(
+            'trust_point_deducted', 
+            student.user.email, 
+            {
+              name: student.fullName,
+              request_code: request.requestCode,
+              delta: penalty,
+              reason: 'Không đến nhận thiết bị đúng hạn (Bom hàng)'
+            },
+            student.userId,
+            request.id
+          );
         }
       }
     }
@@ -81,11 +88,17 @@ async function runDailyTasks() {
         transaction 
       });
       if (student && student.user && student.user.email) {
-        await emailService.sendDynamicEmail('return_reminder', student.user.email, {
-          name: student.fullName,
-          request_code: request.requestCode,
-          return_date: request.returnDate
-        });
+        await emailService.sendDynamicEmail(
+          'return_reminder', 
+          student.user.email, 
+          {
+            name: student.fullName,
+            request_code: request.requestCode,
+            return_date: request.returnDate,
+          },
+          student.userId,
+          request.id
+        );
       }
     }
 
@@ -128,12 +141,18 @@ async function runDailyTasks() {
 
         // Gửi email cảnh báo trừ điểm hàng ngày
         if (student.user && student.user.email) {
-          await emailService.sendDynamicEmail('trust_point_deducted', student.user.email, {
-            name: student.fullName,
-            request_code: request.requestCode,
-            delta: penalty,
-            reason: `Quá hạn trả thiết bị ${lateDays} ngày`
-          });
+          await emailService.sendDynamicEmail(
+            'trust_point_deducted', 
+            student.user.email, 
+            {
+              name: student.fullName,
+              request_code: request.requestCode,
+              delta: penalty,
+              reason: `Quá hạn trả thiết bị ${lateDays} ngày`
+            },
+            student.userId,
+            request.id
+          );
         }
       }
     }

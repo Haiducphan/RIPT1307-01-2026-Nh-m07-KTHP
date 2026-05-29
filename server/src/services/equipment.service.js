@@ -1,19 +1,13 @@
 const { Op } = require('sequelize');
 const Equipment = require('../models/equipment.model');
 const EquipmentImage = require('../models/equipmentImages.model');
-const sequelize = require('../config/database'); // Cần để dùng Transaction
+const sequelize = require('../config/database'); 
+const auditLogService = require('./auditLog.service'); // Tích hợp ghi log
 
-const fs = require('fs');
-const path = require('path');
-
-// Xử lý danh sách thiết bị
+// Lấy danh sách thiết bị
 async function listEquipment({ tier, conditionStatus, page = 1, limit = 12, includeInactive = false } = {}) {
   const where = {};
-
-  if (!includeInactive) {
-    where.isActive = true; 
-  }
-  
+  if (!includeInactive) where.isActive = true; 
   if (tier) where.tier = tier;
   if (conditionStatus) where.conditionStatus = conditionStatus;
 
@@ -35,19 +29,19 @@ async function listEquipment({ tier, conditionStatus, page = 1, limit = 12, incl
   };
 }
 
-// Xử lý lấy thiết bị theo ID
+// Lấy thiết bị theo ID
 async function getEquipmentById(id, { includeDeleted = false } = {}) {
   const where = { id };
-  if (!includeDeleted) where.is_active = true; 
+  if (!includeDeleted) where.isActive = true;
+
   return Equipment.findOne({ 
     where,
     include: ['images']
   });
 }
 
-// Xử lý tạo thiết bị
+// Tạo thiết bị mới kèm ảnh
 async function createEquipment(payload, files) {
-
   if (!payload.code || !payload.name || !payload.categoryId || !payload.tier) {
     const err = new Error('Thiếu trường bắt buộc: code, name, categoryId, tier');
     err.status = 400;
@@ -71,6 +65,7 @@ async function createEquipment(payload, files) {
       createdBy: payload.createdBy
     }, { transaction });
 
+    // Xử lý lưu ảnh
     if (files && files.length > 0) {
       const imageData = files.map((file, index) => ({
         equipmentId: equipment.id,
@@ -78,31 +73,37 @@ async function createEquipment(payload, files) {
         isPrimary: index === 0 ? true : false,
         sortOrder: index
       }));
-
       await EquipmentImage.bulkCreate(imageData, { transaction });
     }
 
+    // Ghi Log lịch sử
+    await auditLogService.logAdminAction({
+      userId: payload.createdBy,
+      action: 'create_equipment',
+      entityType: 'equipment',
+      entityId: equipment.id,
+      newValue: { code: equipment.code, name: equipment.name, total: equipment.totalQuantity }
+    }, transaction);
+
     await transaction.commit();
 
-    return await Equipment.findByPk(equipment.id, {
-      include: ['images']
-    });
-
+    return await Equipment.findByPk(equipment.id, { include: ['images'] });
   } catch (error) {
     await transaction.rollback();
     throw error;
   }
 }
 
-// Xử lý cập nhật thiết bị
-async function updateEquipment(id, payload, files) {
-  const equipment = await Equipment.findOne({ where: { id, is_active: true } });
+// Cập nhật thiết bị
+async function updateEquipment(id, payload, files, adminId) {
+  const equipment = await Equipment.findOne({ where: { id, isActive: true } });
   if (!equipment) return null;
 
   const transaction = await sequelize.transaction();
 
   try {
-    // Cập nhật thông tin chữ
+    const oldData = { ...equipment.toJSON() };
+
     await equipment.update({
       code: payload.code !== undefined ? payload.code : equipment.code,
       name: payload.name !== undefined ? payload.name : equipment.name,
@@ -115,90 +116,95 @@ async function updateEquipment(id, payload, files) {
     // Xử lý ảnh mới
     if (files && files.length > 0) {
       const currentImagesCount = await EquipmentImage.count({ where: { equipmentId: id }, transaction });
-
       const imageData = files.map((file, index) => ({
         equipmentId: id,
         imageUrl: `/uploads/equipment/${file.filename}`, 
         isPrimary: (currentImagesCount === 0 && index === 0) ? true : false, 
         sortOrder: currentImagesCount + index
       }));
-
       await EquipmentImage.bulkCreate(imageData, { transaction });
     }
 
     // Xử lý ảnh bị xóa
     if (payload.deletedImageIds) {
-      let idsToDelete = typeof payload.deletedImageIds === 'string' 
-                        ? payload.deletedImageIds.split(',') 
-                        : payload.deletedImageIds;
-      
+      let idsToDelete = typeof payload.deletedImageIds === 'string' ? payload.deletedImageIds.split(',') : payload.deletedImageIds;
       if(idsToDelete.length > 0) {
-        await EquipmentImage.destroy({ 
-            where: { id: idsToDelete, equipmentId: id }, 
-            transaction 
-        });
+        await EquipmentImage.destroy({ where: { id: idsToDelete, equipmentId: id }, transaction });
       }
     }
 
+    await auditLogService.logAdminAction({
+      userId: adminId,
+      action: 'update_equipment',
+      entityType: 'equipment',
+      entityId: id,
+      oldValue: { name: oldData.name, tier: oldData.tier },
+      newValue: { name: equipment.name, tier: equipment.tier }
+    }, transaction);
+
     await transaction.commit();
     return getEquipmentById(id);
-
   } catch (error) {
     await transaction.rollback();
     throw error;
   }
 }
 
-// Xử lý xoá thiết bị
-async function softDeleteEquipment(id) {
+// Xoá mềm thiết bị
+async function softDeleteEquipment(id, adminId) {
   const equipment = await Equipment.findOne({ where: { id, isActive: true } });
   if (!equipment) return null;
-  return equipment.update({ isActive: false }); 
-}
-
-
-// Xứ lý cập nhật số lượng thiết bị trong kho
-async function updateStock(id, { totalQuantity, availableQuantity }) {
-  const equipment = await Equipment.findOne({ where: { id, isActive: true } });
   
-  if (!equipment) {
-    const err = new Error('Thiết bị không tồn tại hoặc đã ngừng sử dụng');
-    err.status = 404;
-    throw err;
-  }
+  await equipment.update({ isActive: false }); 
 
-  if (totalQuantity !== undefined && totalQuantity < 0) {
-    const err = new Error('Tong so luong khong duoc am');
-    err.status = 400;
-    throw err;
-  }
-
-  if (availableQuantity !== undefined && availableQuantity < 0) {
-    const err = new Error('So luong con lai khong duoc am');
-    err.status = 400;
-    throw err;
-  }
-
-  if (availableQuantity !== undefined && totalQuantity !== undefined && availableQuantity > totalQuantity) {
-    const err = new Error('So luong con lai khong duoc lon hon tong so luong');
-    err.status = 400;
-    throw err;
-  }
-
-  await equipment.update({
-    ...(totalQuantity !== undefined && { totalQuantity }),
-    ...(availableQuantity !== undefined && { availableQuantity })
+  await auditLogService.logAdminAction({
+    userId: adminId,
+    action: 'delete_equipment',
+    entityType: 'equipment',
+    entityId: id,
+    oldValue: { isActive: true },
+    newValue: { isActive: false }
   });
 
   return equipment;
 }
 
+// Cập nhật kho thủ công
+async function updateStock(id, { totalQuantity }, adminId) {
+  const equipment = await Equipment.findOne({ where: { id, isActive: true } });
+  if (!equipment) throw { status: 404, message: 'Thiết bị không tồn tại' };
+  if (totalQuantity !== undefined && totalQuantity < 0) throw { status: 400, message: 'Tổng số lượng không được âm' };
+
+  if (totalQuantity !== undefined) {
+    const currentBorrowing = equipment.borrowingQuantity || 0;
+    const currentBroken = equipment.brokenQuantity || 0;
+    const newAvailableQuantity = totalQuantity - currentBorrowing - currentBroken;
+
+    if (newAvailableQuantity < 0) {
+      throw { status: 400, message: `Không thể giảm vì đang có ${currentBorrowing} máy được mượn và ${currentBroken} máy hỏng.` };
+    }
+
+    const oldTotal = equipment.totalQuantity;
+    await equipment.update({ totalQuantity, availableQuantity: newAvailableQuantity });
+
+    await auditLogService.logAdminAction({
+      userId: adminId,
+      action: 'update_stock',
+      entityType: 'equipment',
+      entityId: id,
+      oldValue: { totalQuantity: oldTotal },
+      newValue: { totalQuantity }
+    });
+  }
+
+  return equipment;
+}
 
 module.exports = {
-  listEquipment,
-  getEquipmentById,
-  createEquipment,
-  updateEquipment,
-  softDeleteEquipment,
-  updateStock
+  listEquipment, 
+  getEquipmentById, 
+  createEquipment, 
+  updateEquipment, 
+  softDeleteEquipment, 
+  updateStock,
 };

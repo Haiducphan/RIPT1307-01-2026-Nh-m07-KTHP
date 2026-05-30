@@ -312,8 +312,9 @@ async function returnRequest(requestId, adminId, returnCondition, damageNote) {
       await equipment.increment('brokenQuantity', { by: request.quantity, transaction });
     }
 
-    let scoreDelta = 0;
-    let reason = '';
+    // Tính điểm cơ bản
+    let baseScoreDelta = 0;
+    let baseReason = '';
     let newStreak = student.goodReturnStreak;
     
     const today = new Date();
@@ -322,44 +323,68 @@ async function returnRequest(requestId, adminId, returnCondition, damageNote) {
     const isOntime = today <= expectedReturnDate && request.status !== 'overdue';
 
     if (returnCondition === 'minor_damage') {
-      scoreDelta = -10; reason = 'minor_damage'; newStreak = 0;
+      baseScoreDelta = -10; baseReason = 'minor_damage'; newStreak = 0;
     } else if (returnCondition === 'major_damage' || returnCondition === 'lost') {
-      scoreDelta = -30; reason = 'major_damage'; newStreak = 0;
+      baseScoreDelta = -30; baseReason = 'major_damage'; newStreak = 0;
     } else if (returnCondition === 'perfect' && isOntime) {
-      scoreDelta = 2; reason = 'return_ontime'; newStreak += 1;
+      baseScoreDelta = 2; baseReason = 'return_ontime'; newStreak += 1;
     } else {
       newStreak = 0;
     }
 
-    if (newStreak === 3) { scoreDelta += 5; reason = 'streak_3'; }
-    if (newStreak === 5) { scoreDelta += 7; reason = 'streak_5'; }
+    let tempScore = student.trustScore + baseScoreDelta;
+    if (tempScore > 100) tempScore = 100;
+    if (tempScore < 0) tempScore = 0;
+    let tempRank = calculateRank(tempScore);
 
-    let newScore = student.trustScore + scoreDelta;
-    if (newScore > 100) newScore = 100;
-    if (newScore < 0) newScore = 0;
-    const newRank = calculateRank(newScore);
-
-    await student.update({
-      trustScore: newScore,
-      trustRank: newRank,
-      goodReturnStreak: newStreak,
-      totalLate: (!isOntime) ? student.totalLate + 1 : student.totalLate
-    }, { transaction });
-
-    if (scoreDelta !== 0) {
+    if (baseScoreDelta !== 0) {
       await TrustScoreLog.create({
         studentId: student.id,
         borrowRequestId: request.id,
-        delta: scoreDelta,
+        delta: baseScoreDelta,
         scoreBefore: student.trustScore,
-        scoreAfter: newScore,
+        scoreAfter: tempScore,
         rankBefore: student.trustRank,
-        rankAfter: newRank,
-        reason: reason,
+        rankAfter: tempRank,
+        reason: baseReason,
         note: damageNote,
         createdBy: adminId
       }, { transaction });
     }
+
+    // Tính điểm thưởng chuỗi
+    let streakDelta = 0;
+    let streakReason = '';
+    if (newStreak === 3) { streakDelta = 5; streakReason = 'streak_3'; }
+    if (newStreak === 5) { streakDelta = 7; streakReason = 'streak_5'; }
+
+    let finalScore = tempScore + streakDelta;
+    if (finalScore > 100) finalScore = 100;
+    if (finalScore < 0) finalScore = 0;
+    let finalRank = calculateRank(finalScore);
+
+    if (streakDelta !== 0) {
+      await TrustScoreLog.create({
+        studentId: student.id,
+        borrowRequestId: request.id, 
+        delta: streakDelta,
+        scoreBefore: tempScore,
+        scoreAfter: finalScore,
+        rankBefore: tempRank,
+        rankAfter: finalRank,
+        reason: streakReason,
+        note: `Thưởng đạt chuỗi ${newStreak} lần trả đồ hoàn hảo`,
+        createdBy: adminId
+      }, { transaction });
+    }
+
+    // Lưu cập nhật
+    await student.update({
+      trustScore: finalScore,
+      trustRank: finalRank,
+      goodReturnStreak: newStreak,
+      totalLate: (!isOntime) ? student.totalLate + 1 : student.totalLate
+    }, { transaction });
 
     const finalStatus = isOntime ? 'returned_ontime' : 'returned_late';
     await request.update({
@@ -368,7 +393,7 @@ async function returnRequest(requestId, adminId, returnCondition, damageNote) {
       returnCondition: returnCondition,
       returnCheckedBy: adminId,
       damageNote: damageNote,
-      trustScoreDelta: request.trustScoreDelta + scoreDelta
+      trustScoreDelta: request.trustScoreDelta + baseScoreDelta + streakDelta
     }, { transaction });
 
     await transaction.commit();

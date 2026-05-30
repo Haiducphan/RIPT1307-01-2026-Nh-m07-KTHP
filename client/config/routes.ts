@@ -12,6 +12,14 @@ const routes = [
     component: '@/pages/register'
   },
   {
+    path: '/forgot-password',
+    component: '@/pages/forgot-password'
+  },
+  {
+    path: '/reset-password',
+    component: '@/pages/reset-password'
+  },
+  {
     path: '/student',
     component: '@/layouts/AppLayout',
     wrappers: ['@/wrappers/StudentGuard'],

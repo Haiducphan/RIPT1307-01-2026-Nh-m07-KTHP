@@ -1,5 +1,5 @@
 import { Button, Checkbox, Col, Form, Input, message, Row, Typography } from 'antd';
-import { history, Link } from '@umijs/max';
+import { history, Link } from 'umi';
 import { ROUTES } from '@/constants/routes';
 import { login } from '@/services/auth';
 import { useAuthStore } from '@/stores/authStore';

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Button, Checkbox, Col, Form, Input, message, Row, Typography } from 'antd';
-import { history, Link } from '@umijs/max';
+import { history, Link } from 'umi';
+import { register } from '@/services/auth';
 
 interface RegisterFormValues {
   fullName: string;
-  studentId: string;
+  studentCode: string;
   email: string;
   phone?: string;
   password: string;
@@ -12,12 +13,13 @@ interface RegisterFormValues {
   agreed: boolean;
 }
 
-type RegisterPayload = Omit<RegisterFormValues, 'confirmPassword' | 'agreed'>;
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    if (response?.data?.message) return response.data.message;
+  }
 
-function mockRegister(_payload: RegisterPayload) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, 1000);
-  });
+  return error instanceof Error ? error.message : fallback;
 }
 
 export default function RegisterPage() {
@@ -32,18 +34,18 @@ export default function RegisterPage() {
     setSubmitting(true);
 
     try {
-      await mockRegister({
+      const response = await register({
         fullName: values.fullName,
-        studentId: values.studentId,
+        studentCode: values.studentCode,
         email: values.email,
         phone: values.phone,
         password: values.password
       });
-      message.success('Đăng ký thành công! Vui lòng đăng nhập.', 2);
+
+      message.success(response.message || 'Đăng ký thành công! Vui lòng đăng nhập.', 2);
       history.push('/login');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Đăng ký thất bại';
-      message.error(errorMessage, 3);
+      message.error(getErrorMessage(error, 'Đăng ký thất bại. Vui lòng thử lại.'), 3);
     } finally {
       setSubmitting(false);
     }
@@ -192,7 +194,7 @@ export default function RegisterPage() {
               </Form.Item>
 
               <Form.Item
-                name="studentId"
+                name="studentCode"
                 label={<span style={{ fontSize: 15, fontWeight: 700, color: '#1A1F1B' }}>Mã sinh viên</span>}
                 rules={[
                   { required: true, whitespace: true, message: 'Nhập mã sinh viên' },

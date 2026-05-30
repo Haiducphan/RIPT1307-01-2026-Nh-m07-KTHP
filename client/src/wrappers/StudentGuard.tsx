@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from '@umijs/max';
+import { Navigate, Outlet } from 'umi';
 import { ROUTES } from '@/constants/routes';
 import { useAuthStore } from '@/stores/authStore';
 

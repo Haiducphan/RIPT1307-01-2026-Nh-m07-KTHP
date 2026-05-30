@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Button, Col, Empty, Grid, Input, Row, Skeleton } from 'antd';
-import { history } from '@umijs/max';
+import { history } from 'umi';
 import EquipmentCard from '@/components/EquipmentCard';
 import StatsCard from '@/components/StatsCard';
 import TrustRankBadge from '@/components/TrustRankBadge';

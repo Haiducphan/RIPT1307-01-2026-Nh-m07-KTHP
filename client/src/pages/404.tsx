@@ -1,5 +1,5 @@
 import { Button, Result } from 'antd';
-import { history } from '@umijs/max';
+import { history } from 'umi';
 import { ROUTES } from '@/constants/routes';
 
 export default function NotFoundPage() {

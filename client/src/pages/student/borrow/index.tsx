@@ -1,11 +1,16 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Col, DatePicker, Empty, Form, Input, InputNumber, message, Row, Select, Spin, Tag } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import { history, useLocation } from '@umijs/max';
+import { history, useLocation } from 'umi';
 import { createBorrowRequest } from '@/services/borrowRequests';
+import { getDeviceById } from '@/services/devices';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import { useAuthStore } from '@/stores/authStore';
+import type { Device } from '@/types';
 
-import { getDevices } from '@/services/equipment';
+type DeviceTier = 'S' | 'A' | 'B' | 'C';
+type TrustRank = 'diamond' | 'gold' | 'silver' | 'bronze' | 'stone';
 
 interface BorrowFormValues {
   borrowDate: Dayjs;
@@ -100,11 +105,63 @@ function EmptyBorrowState() {
 }
 
 export default function StudentBorrowPage() {
-  const { data: rawData } = useAsyncData(getDevices);
-  const devices = rawData?.data ?? [];
+  const [form] = Form.useForm<BorrowFormValues>();
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const location = useLocation();
+  const { currentUser } = useAuthStore();
+  const deviceId = useMemo(() => new URLSearchParams(location.search).get('deviceId'), [location.search]);
+  const { data: device, loading } = useAsyncData<Device | undefined>(
+    () => (deviceId ? getDeviceById(deviceId) : Promise.resolve(undefined)),
+    [deviceId]
+  );
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [deviceId]);
+
+  const userMeta = currentUser as (typeof currentUser & {
+    trustRank?: TrustRank;
+    trustScore?: number;
+  });
+  const currentRank = userMeta?.trustRank ?? 'gold';
+  const currentScore = userMeta?.trustScore ?? 85;
+
+  if (loading) {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', minHeight: 360 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!deviceId || !device) {
+    return <EmptyBorrowState />;
+  }
+
+  const icon = getDeviceIcon(device);
+  const tier = getDeviceTier(device);
+  const description = getDeviceDescription(device);
+  const requiredRank = REQUIRED_RANK_BY_TIER[tier];
+  const hasRequiredRank = RANK_SCORE[currentRank] >= RANK_SCORE[requiredRank];
+  const hasStock = device.availableQuantity > 0;
+  const formDisabled = !hasRequiredRank || !hasStock;
+  const borrowedQuantity = Math.max(device.totalQuantity - device.availableQuantity, 0);
+  const galleryItems = device.images?.length ? device.images : device.image ? [device.image] : ['icon-1', 'icon-2', 'icon-3'];
+  const activeGalleryItem = galleryItems[Math.min(activeImageIndex, galleryItems.length - 1)];
+  const hasRealImages = Boolean(device.images?.length || device.image);
+
+  const getErrorMessage = (error: unknown) => {
+    if (error && typeof error === 'object' && 'response' in error) {
+      const response = (error as { response?: { data?: { message?: string } } }).response;
+      if (response?.data?.message) return response.data.message;
+    }
+
+    return 'Không thể gửi yêu cầu mượn. Vui lòng thử lại.';
+  };
 
   const handleSubmit = async (values: BorrowFormValues) => {
-    const hideLoading = message.loading('Đang gửi yêu cầu mượn...', 0);
+    setSubmitting(true);
 
     try {
       await createBorrowRequest({
@@ -115,43 +172,244 @@ export default function StudentBorrowPage() {
         note: `[${values.eventName}] ${values.purpose}`
       });
 
-      hideLoading();
       message.success('Đã gửi yêu cầu mượn', 2);
       history.push('/student/requests');
     } catch (error) {
-      hideLoading();
       console.error('Create borrow request failed:', error);
-      message.error('Không thể gửi yêu cầu mượn. Vui lòng thử lại.', 3);
+      message.error(getErrorMessage(error), 3);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <>
-      <PageTitle title="Gui yeu cau muon" description="Chon thiet bi, so luong va thoi gian muon tra." />
-      <Card>
-        <Form layout="vertical" onFinish={handleSubmit} style={{ maxWidth: 640 }}>
-          <Form.Item name="deviceId" label="Thiet bi" rules={[{ required: true }]}>
-            <Select
-              options={devices.map((device) => ({
-                value: device.id,
-                label: `${device.name} - con ${device.availableQuantity}`
-              }))}
+    <div style={{ paddingBottom: 48 }}>
+      <Button type="link" onClick={() => history.push('/student/devices')} style={{ padding: 0, marginBottom: 20 }}>
+        ← Quay lại danh sách
+      </Button>
+
+      <Row gutter={[28, 28]} align="top">
+        <Col xs={24} lg={9}>
+          <Card
+            variant="borderless"
+            style={{ borderRadius: 18, border: '1px solid #E5DECB', background: '#FFFFFF', boxShadow: '0 8px 28px rgba(45, 74, 62, 0.06)' }}
+            styles={{ body: { padding: 18 } }}
+          >
+            <div style={{ position: 'relative', borderRadius: 16, overflow: 'hidden', background: '#EFE9DD', marginBottom: 14 }}>
+              {hasRealImages ? (
+                <img
+                  key={activeGalleryItem}
+                  src={activeGalleryItem}
+                  alt={device.name}
+                  style={{ width: '100%', height: 'min(260px, 52vw)', objectFit: 'cover', display: 'block', transition: 'opacity 0.2s ease' }}
+                />
+              ) : (
+                <div
+                  key={activeGalleryItem}
+                  style={{ width: '100%', height: 'min(260px, 52vw)', background: '#F5F1E8', display: 'grid', placeItems: 'center', fontSize: 88, lineHeight: 1 }}
+                >
+                  {icon}
+                </div>
+              )}
+              <Tag
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  right: 12,
+                  margin: 0,
+                  border: '1px solid rgba(201, 154, 63, 0.25)',
+                  borderRadius: 999,
+                  background: '#FFFFFF',
+                  color: '#C99A3F',
+                  fontFamily: 'Georgia, serif',
+                  fontWeight: 700
+                }}
+              >
+                Hạng {tier}
+              </Tag>
+            </div>
+
+            {galleryItems.length > 1 && (
+              <Row gutter={8} style={{ marginBottom: 16 }}>
+                {galleryItems.map((item, index) => {
+                  const active = activeImageIndex === index;
+
+                  return (
+                    <Col span={8} key={`${item}-${index}`}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveImageIndex(index)}
+                        style={{
+                          width: '100%',
+                          height: 58,
+                          borderRadius: 10,
+                          border: active ? '2px solid #2D4A3E' : '1px solid #E5E5E5',
+                          background: active ? '#EFE9DD' : '#F5F1E8',
+                          padding: 4,
+                          cursor: 'pointer',
+                          overflow: 'hidden',
+                          opacity: active ? 1 : 0.78,
+                          transition: 'border-color 0.2s ease, transform 0.2s ease, opacity 0.2s ease'
+                        }}
+                        onMouseEnter={(event) => {
+                          event.currentTarget.style.borderColor = '#6BA67B';
+                          event.currentTarget.style.transform = 'scale(1.02)';
+                        }}
+                        onMouseLeave={(event) => {
+                          event.currentTarget.style.borderColor = active ? '#2D4A3E' : '#E5E5E5';
+                          event.currentTarget.style.transform = 'scale(1)';
+                        }}
+                      >
+                        {hasRealImages ? (
+                          <img src={item} alt={`${device.name} ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
+                        ) : (
+                          <span style={{ display: 'grid', placeItems: 'center', width: '100%', height: '100%', fontSize: 28, lineHeight: 1 }}>{icon}</span>
+                        )}
+                      </button>
+                    </Col>
+                  );
+                })}
+              </Row>
+            )}
+
+            <h2 style={{ fontFamily: 'Georgia, serif', fontSize: 26, fontWeight: 500, lineHeight: 1.15, color: '#1A1F1B', margin: '0 0 8px' }}>
+              {device.name}
+            </h2>
+            <p style={{ color: '#6B6F6C', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}>{description}</p>
+
+            <Row gutter={[10, 10]}>
+              {[
+                ['Tổng số', device.totalQuantity, '#1A1F1B'],
+                ['Sẵn có', device.availableQuantity, '#4F8B5F'],
+                ['Đang mượn', borrowedQuantity, '#8B6A1F']
+              ].map(([label, value, color]) => (
+                <Col xs={8} key={String(label)}>
+                  <div style={{ border: '1px solid #E5DECB', borderRadius: 12, padding: '10px 8px', background: '#FAF8F2' }}>
+                    <div style={{ fontSize: 11, color: '#6B6F6C', marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: String(color) }}>{value}</div>
+                  </div>
+                </Col>
+              ))}
+            </Row>
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={15}>
+          <Card
+            variant="borderless"
+            style={{ borderRadius: 18, border: '1px solid #E5DECB', background: '#FFFFFF', boxShadow: '0 16px 42px rgba(45, 74, 62, 0.08)' }}
+            styles={{ body: { padding: 24 } }}
+          >
+            <div style={{ marginBottom: 18 }}>
+              <Tag style={{ marginBottom: 12, border: 'none', borderRadius: 100, color: '#075985', background: '#E0F2FE', padding: '4px 12px' }}>
+                Yêu cầu hạng {RANK_LABEL[requiredRank]} · Thiết bị hạng {tier}
+              </Tag>
+              <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 36, fontWeight: 500, lineHeight: 1.1, color: '#1A1F1B', margin: '0 0 8px' }}>
+                Xác nhận yêu cầu mượn
+              </h1>
+              <p style={{ color: '#6B6F6C', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
+                Điền thông tin sử dụng để CLB xét duyệt yêu cầu của bạn.
+              </p>
+            </div>
+
+            <Alert
+              showIcon
+              type={hasRequiredRank && hasStock ? 'info' : 'error'}
+              style={{ marginBottom: 22, borderRadius: 12, background: hasRequiredRank && hasStock ? '#F5EBD0' : '#F2DDD7', borderColor: hasRequiredRank && hasStock ? '#E5DECB' : '#E4B7AD' }}
+              message={hasStock ? 'Điều kiện mượn thiết bị' : 'Thiết bị hiện đã hết hàng'}
+              description={
+                hasStock
+                  ? `Cần hạng ${RANK_LABEL[requiredRank]} để mượn thiết bị hạng ${tier}. Hạng hiện tại của bạn: ${RANK_LABEL[currentRank]} (${currentScore} điểm)${hasRequiredRank ? ' - đủ điều kiện.' : ' - chưa đủ điều kiện.'}`
+                  : 'Bạn chưa thể gửi yêu cầu mượn thiết bị này. Vui lòng quay lại danh sách và chọn thiết bị còn hàng.'
+              }
             />
-          </Form.Item>
-          <Form.Item name="quantity" label="So luong" rules={[{ required: true }]}>
-            <InputNumber min={1} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="dateRange" label="Ngay muon - tra" rules={[{ required: true }]}>
-            <DatePicker.RangePicker style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="note" label="Ghi chu">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-          <Button type="primary" htmlType="submit">
-            Gui yeu cau
-          </Button>
-        </Form>
-      </Card>
-    </>
+
+            <Form<BorrowFormValues>
+              form={form}
+              layout="vertical"
+              disabled={formDisabled || submitting}
+              requiredMark={false}
+              initialValues={{
+                borrowDate: dayjs(),
+                returnDate: dayjs().add(3, 'day'),
+                quantity: 1,
+                eventName: EVENT_OPTIONS[0]
+              }}
+              onFinish={handleSubmit}
+              scrollToFirstError
+            >
+              <Row gutter={16}>
+                <Col xs={24} md={12}>
+                  <Form.Item name="borrowDate" label="Ngày bắt đầu mượn" rules={[{ required: true, message: 'Chọn ngày bắt đầu mượn' }]}>
+                    <DatePicker style={{ width: '100%', height: 42 }} format="DD/MM/YYYY" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="returnDate"
+                    label="Ngày dự kiến trả"
+                    dependencies={['borrowDate']}
+                    rules={[
+                      { required: true, message: 'Chọn ngày dự kiến trả' },
+                      ({ getFieldValue }) => ({
+                        validator(_, value: Dayjs) {
+                          const borrowDate = getFieldValue('borrowDate') as Dayjs | undefined;
+                          if (!value || !borrowDate || !value.isBefore(borrowDate, 'day')) return Promise.resolve();
+                          return Promise.reject(new Error('Ngày trả không được trước ngày mượn'));
+                        }
+                      })
+                    ]}
+                  >
+                    <DatePicker style={{ width: '100%', height: 42 }} format="DD/MM/YYYY" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="quantity"
+                    label="Số lượng"
+                    rules={[
+                      { required: true, message: 'Nhập số lượng' },
+                      {
+                        validator(_, value: number) {
+                          if (value === undefined || value === null) return Promise.reject(new Error('Nhập số lượng'));
+                          if (value <= 0) return Promise.reject(new Error('Số lượng phải lớn hơn 0'));
+                          if (value > device.availableQuantity) return Promise.reject(new Error(`Số lượng không được vượt quá ${device.availableQuantity} thiết bị đang sẵn có`));
+                          return Promise.resolve();
+                        }
+                      }
+                    ]}
+                  >
+                    <InputNumber min={1} max={device.availableQuantity} style={{ width: '100%', height: 42 }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item name="eventName" label="Sự kiện sử dụng" rules={[{ required: true, message: 'Chọn sự kiện sử dụng' }]}>
+                    <Select style={{ height: 42 }} options={EVENT_OPTIONS.map((eventName) => ({ value: eventName, label: eventName }))} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item name="purpose" label="Mục đích mượn" rules={[{ required: true, whitespace: true, message: 'Mục đích mượn không được bỏ trống' }]}> 
+                <Input.TextArea rows={5} placeholder="Ví dụ: Quay video cho sự kiện Đêm nhạc CLB, dùng trong khung giờ 18:00 - 21:00..." />
+              </Form.Item>
+
+              <Button
+                type="primary"
+                htmlType="submit"
+                block
+                loading={submitting}
+                disabled={formDisabled || submitting}
+                style={{ height: 48, background: '#2D4A3E', borderColor: '#2D4A3E', borderRadius: 12, fontWeight: 700 }}
+              >
+                {submitting ? 'Đang gửi...' : 'Gửi yêu cầu mượn'}
+              </Button>
+            </Form>
+          </Card>
+        </Col>
+      </Row>
+    </div>
   );
 }

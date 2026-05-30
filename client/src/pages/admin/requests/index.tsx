@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   Avatar,
   Button,
@@ -21,14 +22,22 @@ import {
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import { getBorrowRequests } from '@/services/borrowRequests';
+import { approveBorrowRequest, getBorrowRequests, handoverBorrowRequest, markReturned, rejectBorrowRequest } from '@/services/borrowRequests';
+import type { NormalizedBorrowRequest } from '@/services/borrowRequests';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import type { BorrowRequest } from '@/types';
-type RequestStatus = BorrowRequest['status'] | 'cancelled';
+type RequestStatus = BorrowRequest['status'];
 type RequestTab = 'all' | 'pending' | 'approved' | 'borrowed' | 'returned' | 'overdue';
-interface AdminRequest extends Omit<BorrowRequest, 'status'> {
+type AdminActionType = 'approve' | 'reject' | 'handover' | 'return';
+interface AdminRequest extends Omit<BorrowRequest, 'id' | 'status'> {
+  id: string | number;
   status: RequestStatus;
   studentCode: string;
+  requestCode?: string;
+  request_code?: string;
+  purpose?: string;
+  eventName?: string;
+  createdAt?: string;
   rejectReason?: string;
   returnCondition?: string;
   returnNote?: string;
@@ -41,97 +50,29 @@ interface ReturnFormValues {
   note?: string;
 }
 const { RangePicker } = DatePicker;
-const STATUS_CONFIG: Record<RequestStatus, { label: string; color: string; bg: string }> = {
-  pending: { label: 'Chờ duyệt', color: '#8B6A1F', bg: '#F5EBD0' },
-  approved: { label: 'Đã duyệt', color: '#2563EB', bg: '#DCE4F0' },
-  borrowed: { label: 'Đang mượn', color: '#6D4A8F', bg: '#E8DEF0' },
-  returned: { label: 'Đã trả', color: '#2F6F3E', bg: '#E1EFE3' },
-  cancelled: { label: 'Đã huỷ', color: '#6B6F6C', bg: '#ECEEF2' },
-  rejected: { label: 'Đã từ chối', color: '#9B3E33', bg: '#F2DDD7' },
-  overdue: { label: 'Quá hạn', color: '#7A241B', bg: '#F2DDD7' }
+const STATUS_CONFIG: Record<RequestStatus, { label: string; description: string; color: string; bg: string }> = {
+  pending: { label: 'Chờ duyệt', description: 'Cần admin xét duyệt', color: '#8B6A1F', bg: '#F5EBD0' },
+  approved: { label: 'Đã duyệt', description: 'Chờ bàn giao', color: '#2563EB', bg: '#DCE4F0' },
+  borrowed: { label: 'Đang mượn', description: 'Chờ ghi nhận trả', color: '#6D4A8F', bg: '#E8DEF0' },
+  borrowing: { label: 'Đang mượn', description: 'Chờ ghi nhận trả', color: '#6D4A8F', bg: '#E8DEF0' },
+  returned: { label: 'Đã trả', description: 'Hoàn tất', color: '#2F6F3E', bg: '#E1EFE3' },
+  returned_ontime: { label: 'Đã trả', description: 'Trả đúng hạn', color: '#2F6F3E', bg: '#E1EFE3' },
+  returned_late: { label: 'Đã trả', description: 'Trả trễ hạn', color: '#8B6A1F', bg: '#F5EBD0' },
+  cancelled: { label: 'Đã huỷ', description: 'Sinh viên đã huỷ', color: '#6B6F6C', bg: '#ECEEF2' },
+  cancelled_noshow: { label: 'Đã huỷ', description: 'Không đến nhận', color: '#6B6F6C', bg: '#ECEEF2' },
+  rejected: { label: 'Đã từ chối', description: 'Admin đã từ chối', color: '#9B3E33', bg: '#F2DDD7' },
+  overdue: { label: 'Quá hạn', description: 'Cần ghi nhận trả', color: '#7A241B', bg: '#F2DDD7' }
 };
-const FALLBACK_REQUESTS: AdminRequest[] = [
-  {
-    id: '142',
-    studentId: 'sv1',
-    studentName: 'Nguyễn Văn A',
-    studentCode: '22000123',
-    deviceId: 'd1',
-    deviceName: 'Máy ảnh Canon EOS 90D',
-    quantity: 1,
-    borrowDate: '2026-05-12',
-    returnDate: '2026-05-15',
-    status: 'pending',
-    note: 'Quay phim sự kiện đêm nhạc CLB Truyền thông'
-  },
-  {
-    id: '140',
-    studentId: 'sv2',
-    studentName: 'Trần Hương',
-    studentCode: '22000456',
-    deviceId: 'd2',
-    deviceName: 'Micro Shure SM58',
-    quantity: 2,
-    borrowDate: '2026-05-10',
-    returnDate: '2026-05-12',
-    status: 'approved',
-    note: 'Workshop hát nhóm CLB Âm nhạc'
-  },
-  {
-    id: '138',
-    studentId: 'sv3',
-    studentName: 'Phạm Tùng',
-    studentCode: '22000222',
-    deviceId: 'd3',
-    deviceName: 'Loa kéo JBL',
-    quantity: 1,
-    borrowDate: '2026-05-05',
-    returnDate: '2026-05-11',
-    status: 'borrowed',
-    note: 'Sự kiện thể thao khoa CNTT'
-  },
-  {
-    id: '131',
-    studentId: 'sv4',
-    studentName: 'Lê Minh',
-    studentCode: '22000789',
-    deviceId: 'd4',
-    deviceName: 'Máy chiếu Epson EB-X51',
-    quantity: 1,
-    borrowDate: '2026-04-22',
-    returnDate: '2026-04-25',
-    status: 'returned',
-    note: 'Buổi training nội bộ CLB'
-  },
-  {
-    id: '125',
-    studentId: 'sv5',
-    studentName: 'Hoàng Lan',
-    studentCode: '22000333',
-    deviceId: 'd5',
-    deviceName: 'Máy ảnh Sony A7 III',
-    quantity: 1,
-    borrowDate: '2026-04-15',
-    returnDate: '2026-04-18',
-    status: 'rejected',
-    note: 'Quay video promotion CLB'
-  },
-  {
-    id: '119',
-    studentId: 'sv6',
-    studentName: 'Đỗ An',
-    studentCode: '22000666',
-    deviceId: 'd6',
-    deviceName: 'Tripod Manfrotto',
-    quantity: 1,
-    borrowDate: '2026-04-01',
-    returnDate: '2026-04-04',
-    status: 'overdue',
-    note: 'Chụp ảnh truyền thông sự kiện'
-  }
+const BORROWING_STATUSES: RequestStatus[] = ['borrowed', 'borrowing', 'overdue'];
+const RETURNED_STATUSES: RequestStatus[] = ['returned', 'returned_ontime', 'returned_late'];
+const RETURN_CONDITIONS = [
+  { value: 'perfect', label: 'Hoàn hảo', points: '+2đ uy tín', tone: '#2F6F3E' },
+  { value: 'minor_damage', label: 'Trầy nhẹ', points: '0đ uy tín', tone: '#6B6F6C' },
+  { value: 'major_damage', label: 'Hỏng nhẹ', points: '-3đ uy tín', tone: '#B05A4D' },
+  { value: 'lost', label: 'Hỏng nặng / mất', points: '-10đ uy tín', tone: '#9B3E33' }
 ];
-function normalizeText(value: string) {
-  return value
+function normalizeText(value?: string | null) {
+  return String(value ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/đ/g, 'd')
@@ -139,9 +80,12 @@ function normalizeText(value: string) {
     .toLowerCase();
 }
 function getRequestCode(request: AdminRequest) {
-  const digits = request.id.replace(/\D/g, '');
-  const suffix = digits ? digits.slice(-4).padStart(4, '0') : request.id.slice(-4).toUpperCase();
-  return `#REQ-2026-${suffix}`;
+  const requestCode = request.requestCode ?? request.request_code;
+  if (requestCode) return requestCode.startsWith('#') ? requestCode : `#${requestCode}`;
+
+  const id = String(request.id ?? '');
+  const fallbackId = typeof request.id === 'number' ? id.padStart(4, '0') : id;
+  return `#REQ-${fallbackId}`;
 }
 function getInitials(name: string) {
   return name
@@ -151,7 +95,7 @@ function getInitials(name: string) {
     .join('')
     .toUpperCase();
 }
-function getDeviceIcon(deviceName: string) {
+function getDeviceIcon(deviceName?: string | null) {
   const text = normalizeText(deviceName);
   if (text.includes('micro')) return '🎤';
   if (text.includes('loa')) return '🔊';
@@ -168,19 +112,33 @@ function formatDate(value: string, pattern = 'DD/MM') {
 function ellipsisText(value = '', max = 50) {
   return value.length > max ? `${value.slice(0, max)}...` : value;
 }
-function toAdminRequest(request: BorrowRequest, index: number): AdminRequest {
+function getPurpose(request: AdminRequest) {
+  return request.purpose?.trim() || request.note?.trim() || 'Chưa có ghi chú';
+}
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    if (response?.data?.message) return response.data.message;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+}
+function toAdminRequest(request: NormalizedBorrowRequest): AdminRequest {
   return {
     ...request,
     status: request.status as RequestStatus,
-    studentCode: `22000${String(index + 123).padStart(3, '0')}`
+    studentCode: request.studentCode || 'Chưa có MSSV'
   };
 }
 function StatusTag({ status }: { status: RequestStatus }) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
   return (
-    <Tag style={{ border: 'none', borderRadius: 999, color: config.color, background: config.bg, fontWeight: 600, margin: 0 }}>
-      {config.label}
-    </Tag>
+    <div style={{ display: 'grid', gap: 4, justifyItems: 'start' }}>
+      <Tag style={{ border: 'none', borderRadius: 999, color: config.color, background: config.bg, fontWeight: 700, margin: 0 }}>
+        {config.label}
+      </Tag>
+      <span style={{ color: '#8A8E88', fontSize: 12 }}>{config.description}</span>
+    </div>
   );
 }
 function StatCard({ title, value, meta, danger, featured }: { title: string; value: number; meta: string; danger?: boolean; featured?: boolean }) {
@@ -198,28 +156,105 @@ function StatCard({ title, value, meta, danger, featured }: { title: string; val
     </Card>
   );
 }
+function RequestDetailPanel({ request, actions }: { request?: AdminRequest; actions: (request: AdminRequest) => ReactNode }) {
+  if (!request) {
+    return (
+      <Empty
+        image={<div style={{ fontSize: 60 }}>📄</div>}
+        styles={{ image: { height: 80, marginBottom: 14 } }}
+        description={
+          <div>
+            <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Chọn một đơn để xem chi tiết</h3>
+            <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>Bấm vào một dòng trong bảng để xem thông tin xử lý.</p>
+          </div>
+        }
+        style={{ padding: '48px 0' }}
+      />
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ color: '#8A8E88', fontSize: 12, marginBottom: 4 }}>Mã đơn</div>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, color: '#1A1F1B' }}>{getRequestCode(request)}</div>
+        </div>
+        <StatusTag status={request.status} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14, background: '#F8F4EA', borderRadius: 14 }}>
+        <Avatar size={46} style={{ background: '#2D4A3E', color: '#F5EBD0', fontWeight: 700 }}>
+          {getInitials(request.studentName)}
+        </Avatar>
+        <div>
+          <div style={{ fontWeight: 700 }}>{request.studentName}</div>
+          <div style={{ color: '#6B6F6C', fontSize: 13 }}>{request.studentCode}</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 10 }}>
+        <div style={{ color: '#6B6F6C', fontSize: 12 }}>Thiết bị</div>
+        <div style={{ fontWeight: 700, color: '#1A1F1B' }}>
+          {getDeviceIcon(request.deviceName)} {request.deviceName} × {request.quantity}
+        </div>
+        <div style={{ color: '#6B6F6C', fontSize: 13 }}>
+          {formatDate(request.borrowDate, 'DD/MM/YYYY')} → {formatDate(request.returnDate, 'DD/MM/YYYY')}
+        </div>
+      </div>
+
+      <div style={{ borderTop: '1px solid #EFEADA', paddingTop: 14 }}>
+        <div style={{ color: '#6B6F6C', fontSize: 12, marginBottom: 6 }}>Mục đích</div>
+        <div style={{ color: '#1A1F1B', lineHeight: 1.6 }}>{getPurpose(request)}</div>
+      </div>
+
+      <div style={{ borderTop: '1px solid #EFEADA', paddingTop: 14 }}>{actions(request)}</div>
+    </div>
+  );
+}
 export default function AdminRequestsPage() {
   const [rejectForm] = Form.useForm<RejectFormValues>();
   const [returnForm] = Form.useForm<ReturnFormValues>();
-  const { data, loading } = useAsyncData(getBorrowRequests);
-  const [requests, setRequests] = useState<AdminRequest[]>(FALLBACK_REQUESTS);
+  const { data, loading, refresh } = useAsyncData(getBorrowRequests);
+  const [requests, setRequests] = useState<AdminRequest[]>([]);
   const [activeTab, setActiveTab] = useState<RequestTab>('all');
   const [searchText, setSearchText] = useState('');
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [selectedId, setSelectedId] = useState<AdminRequest['id']>();
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [actionKey, setActionKey] = useState<string>();
+  const [isMobile, setIsMobile] = useState(() => (typeof window === 'undefined' ? false : window.innerWidth < 768));
   const [rejectTarget, setRejectTarget] = useState<AdminRequest>();
   const [handoverTarget, setHandoverTarget] = useState<AdminRequest>();
   const [returnTarget, setReturnTarget] = useState<AdminRequest>();
   const [handoverChecked, setHandoverChecked] = useState(false);
+  const detailPanelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (data?.length) setRequests(data.map(toAdminRequest));
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!data) return;
+
+    const nextRequests = data.map(toAdminRequest);
+    setRequests(nextRequests);
+    setSelectedId((currentId) => {
+      if (currentId && nextRequests.some((request) => request.id === currentId)) return currentId;
+      return nextRequests[0]?.id;
+    });
   }, [data]);
   const counts = useMemo(
     () => ({
       all: requests.length,
       pending: requests.filter((item) => item.status === 'pending').length,
       approved: requests.filter((item) => item.status === 'approved').length,
-      borrowed: requests.filter((item) => item.status === 'borrowed').length,
-      returned: requests.filter((item) => item.status === 'returned').length,
+      borrowed: requests.filter((item) => BORROWING_STATUSES.includes(item.status)).length,
+      returned: requests.filter((item) => RETURNED_STATUSES.includes(item.status)).length,
       overdue: requests.filter((item) => item.status === 'overdue').length
     }),
     [requests]
@@ -227,7 +262,11 @@ export default function AdminRequestsPage() {
   const filteredRequests = useMemo(() => {
     const keyword = normalizeText(searchText.trim());
     return requests.filter((request) => {
-      const matchesTab = activeTab === 'all' || request.status === activeTab;
+      const matchesTab =
+        activeTab === 'all' ||
+        request.status === activeTab ||
+        (activeTab === 'borrowed' && BORROWING_STATUSES.includes(request.status)) ||
+        (activeTab === 'returned' && RETURNED_STATUSES.includes(request.status));
       const matchesSearch =
         !keyword ||
         normalizeText(`${getRequestCode(request)} ${request.studentName} ${request.studentCode} ${request.deviceName}`).includes(keyword);
@@ -240,98 +279,190 @@ export default function AdminRequestsPage() {
       return matchesTab && matchesSearch && matchesDate;
     });
   }, [activeTab, dateRange, requests, searchText]);
-  const updateStatus = (id: string, patch: Partial<AdminRequest>) => {
-    setRequests((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  const selectedRequest = requests.find((request) => request.id === selectedId) ?? filteredRequests[0];
+
+  useEffect(() => {
+    if (filteredRequests.length && !filteredRequests.some((request) => request.id === selectedId)) {
+      setSelectedId(filteredRequests[0].id);
+    }
+  }, [filteredRequests, selectedId]);
+
+  const isActionLoading = (type: AdminActionType, requestId?: AdminRequest['id']) => actionKey === `${type}:${requestId}`;
+  const isAnyActionLoading = Boolean(actionKey);
+  const focusDetailPanel = () => {
+    window.setTimeout(() => {
+      detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      detailPanelRef.current?.focus({ preventScroll: true });
+    }, 50);
   };
-  const handleApprove = (request: AdminRequest) => {
+  const selectRequest = (request: AdminRequest, openMobileDetail = false) => {
+    setSelectedId(request.id);
+
+    if (isMobile && openMobileDetail) {
+      setDetailModalOpen(true);
+      return;
+    }
+
+    if (!isMobile) focusDetailPanel();
+  };
+  const runAction = async (type: AdminActionType, request: AdminRequest, action: () => Promise<unknown>, successMessage: string) => {
+    setActionKey(`${type}:${request.id}`);
+    setSelectedId(request.id);
+
     try {
-      // TODO: Kết nối API khi BE2 ready
-      updateStatus(request.id, { status: 'approved' });
-      message.success('Đã duyệt đơn', 2);
+      await action();
+      await refresh();
+      message.success(successMessage, 2);
+      return true;
     } catch (error) {
-      console.error('Approve request failed:', error);
-      message.error('Không thể duyệt đơn. Vui lòng thử lại.', 3);
+      message.error(getErrorMessage(error, 'Không thể thực hiện thao tác. Vui lòng thử lại.'), 3);
+      return false;
+    } finally {
+      setActionKey(undefined);
     }
   };
-  const handleReject = (values: RejectFormValues) => {
+
+  const handleApprove = (request: AdminRequest) => {
+    void runAction('approve', request, () => approveBorrowRequest(String(request.id)), 'Đã duyệt đơn');
+  };
+  const handleReject = async (values: RejectFormValues) => {
     if (!rejectTarget) return;
 
-    try {
-      // TODO: Kết nối API khi BE2 ready
-      updateStatus(rejectTarget.id, { status: 'rejected', rejectReason: values.reason });
+    const success = await runAction('reject', rejectTarget, () => rejectBorrowRequest(String(rejectTarget.id), values.reason), 'Đã từ chối đơn');
+    if (success) {
       setRejectTarget(undefined);
       rejectForm.resetFields();
-      message.success('Đã từ chối', 2);
-    } catch (error) {
-      console.error('Reject request failed:', error);
-      message.error('Không thể từ chối đơn. Vui lòng thử lại.', 3);
     }
   };
-  const handleHandOver = () => {
+  const handleHandOver = async () => {
     if (!handoverTarget) return;
 
-    try {
-      // TODO: Kết nối API khi BE2 ready
-      updateStatus(handoverTarget.id, { status: 'borrowed' });
+    const success = await runAction('handover', handoverTarget, () => handoverBorrowRequest(String(handoverTarget.id)), 'Đã ghi nhận bàn giao');
+    if (success) {
       setHandoverTarget(undefined);
       setHandoverChecked(false);
-      message.success('Đã ghi nhận bàn giao', 2);
-    } catch (error) {
-      console.error('Hand over request failed:', error);
-      message.error('Không thể ghi nhận bàn giao. Vui lòng thử lại.', 3);
     }
   };
   const handleReturn = (values: ReturnFormValues) => {
     if (!returnTarget) return;
 
-    try {
-      // TODO: Kết nối API khi BE2 ready
-      updateStatus(returnTarget.id, { status: 'returned', returnCondition: values.condition, returnNote: values.note });
-      setReturnTarget(undefined);
-      returnForm.resetFields();
-      message.success('Đã ghi nhận trả', 2);
-    } catch (error) {
-      console.error('Return request failed:', error);
-      message.error('Không thể ghi nhận trả. Vui lòng thử lại.', 3);
-    }
+    const condition = RETURN_CONDITIONS.find((item) => item.value === values.condition);
+
+    Modal.confirm({
+      title: 'Xác nhận ghi nhận hoàn trả',
+      okText: 'Xác nhận trả',
+      cancelText: 'Quay lại',
+      content: (
+        <div style={{ lineHeight: 1.7 }}>
+          <div>Đơn: <strong>{getRequestCode(returnTarget)}</strong></div>
+          <div>Thiết bị: <strong>{returnTarget.deviceName} × {returnTarget.quantity}</strong></div>
+          <div>Tình trạng: <strong>{condition?.label}</strong> ({condition?.points})</div>
+          {values.note ? <div>Ghi chú: {values.note}</div> : null}
+        </div>
+      ),
+      onOk: async () => {
+        const success = await runAction(
+          'return',
+          returnTarget,
+          () => markReturned(String(returnTarget.id), { returnCondition: values.condition, damageNote: values.note }),
+          'Đã ghi nhận trả thiết bị'
+        );
+
+        if (success) {
+          setReturnTarget(undefined);
+          returnForm.resetFields();
+        }
+      }
+    });
   };
   const openRejectModal = (request: AdminRequest) => {
+    setSelectedId(request.id);
     setRejectTarget(request);
     rejectForm.resetFields();
   };
   const openHandOverModal = (request: AdminRequest) => {
+    setSelectedId(request.id);
     setHandoverTarget(request);
     setHandoverChecked(false);
   };
   const openReturnModal = (request: AdminRequest) => {
+    setSelectedId(request.id);
     setReturnTarget(request);
     returnForm.setFieldsValue({ condition: 'perfect', note: '' });
   };
   const showDetail = (request: AdminRequest) => {
-    Modal.info({
-      title: `Chi tiết đơn ${getRequestCode(request)}`,
-      content: (
-        <div style={{ lineHeight: 1.8 }}>
-          <div>Sinh viên: {request.studentName} ({request.studentCode})</div>
-          <div>Thiết bị: {request.deviceName} × {request.quantity}</div>
-          <div>Thời gian: {formatDate(request.borrowDate, 'DD/MM/YYYY')} → {formatDate(request.returnDate, 'DD/MM/YYYY')}</div>
-          <div>Mục đích: {request.note || 'Chưa có ghi chú'}</div>
-        </div>
-      )
-    });
+    selectRequest(request, true);
   };
   const actionButtons = (request: AdminRequest) => {
+    const selected = selectedRequest?.id === request.id;
+
     if (request.status === 'pending') {
       return (
         <Space>
-          <Button type="primary" onClick={() => handleApprove(request)}>Duyệt</Button>
-          <Button danger onClick={() => openRejectModal(request)}>Từ chối</Button>
+          <Button
+            type="primary"
+            loading={isActionLoading('approve', request.id)}
+            disabled={isAnyActionLoading && !isActionLoading('approve', request.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleApprove(request);
+            }}
+          >
+            Duyệt
+          </Button>
+          <Button
+            danger
+            disabled={isAnyActionLoading}
+            onClick={(event) => {
+              event.stopPropagation();
+              openRejectModal(request);
+            }}
+          >
+            Từ chối
+          </Button>
         </Space>
       );
     }
-    if (request.status === 'approved') return <Button type="primary" onClick={() => openHandOverModal(request)}>Ghi nhận mượn</Button>;
-    if (request.status === 'borrowed' || request.status === 'overdue') return <Button type="primary" onClick={() => openReturnModal(request)}>Ghi nhận trả</Button>;
-    return <Button onClick={() => showDetail(request)}>Chi tiết</Button>;
+    if (request.status === 'approved') {
+      return (
+        <Button
+          type="primary"
+          disabled={isAnyActionLoading}
+          onClick={(event) => {
+            event.stopPropagation();
+            openHandOverModal(request);
+          }}
+        >
+          Ghi nhận mượn
+        </Button>
+      );
+    }
+    if (BORROWING_STATUSES.includes(request.status)) {
+      return (
+        <Button
+          type="primary"
+          disabled={isAnyActionLoading}
+          onClick={(event) => {
+            event.stopPropagation();
+            openReturnModal(request);
+          }}
+        >
+          Ghi nhận trả
+        </Button>
+      );
+    }
+    return (
+      <Button
+        type={selected ? 'primary' : 'default'}
+        disabled={selected && !isMobile}
+        onClick={(event) => {
+          event.stopPropagation();
+          showDetail(request);
+        }}
+      >
+        {selected ? 'Đang xem' : 'Chi tiết'}
+      </Button>
+    );
   };
   const tabItems = [
     { key: 'all', label: `Tất cả (${counts.all})` },
@@ -364,27 +495,46 @@ export default function AdminRequestsPage() {
         </Col>
       </Row>
       <Tabs activeKey={activeTab} items={tabItems} onChange={(key) => setActiveTab(key as RequestTab)} />
-      <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
-          <Input.Search
-            allowClear
-            placeholder="Tìm theo tên SV hoặc mã đơn..."
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            style={{ width: 320, maxWidth: '100%' }}
-          />
-          <RangePicker
-            placeholder={['Từ ngày', 'Đến ngày']}
-            format="DD/MM/YYYY"
-            onChange={(dates) => setDateRange(dates as [Dayjs, Dayjs] | null)}
-          />
-        </div>
-        <Table<AdminRequest>
-          rowKey="id"
-          loading={{ spinning: loading, tip: 'Đang tải yêu cầu...' }}
-          dataSource={filteredRequests}
-          pagination={{ pageSize: 8 }}
-          scroll={{ x: 'max-content' }}
+      <style>
+        {`
+          .admin-request-row-selected > td {
+            background: #F8F4EA !important;
+            border-top: 1px solid rgba(45, 74, 62, 0.22) !important;
+            border-bottom: 1px solid rgba(45, 74, 62, 0.22) !important;
+          }
+          .admin-request-row-selected > td:first-child {
+            border-left: 3px solid #2D4A3E !important;
+          }
+        `}
+      </style>
+      <Row gutter={[24, 24]} align="top">
+        <Col xs={24} xl={16}>
+          <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
+              <Input.Search
+                allowClear
+                placeholder="Tìm theo tên SV hoặc mã đơn..."
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                style={{ width: 320, maxWidth: '100%' }}
+              />
+              <RangePicker
+                placeholder={['Từ ngày', 'Đến ngày']}
+                format="DD/MM/YYYY"
+                onChange={(dates) => setDateRange(dates as [Dayjs, Dayjs] | null)}
+              />
+            </div>
+            <Table<AdminRequest>
+              rowKey="id"
+              loading={{ spinning: loading, tip: 'Đang tải yêu cầu...' }}
+              dataSource={filteredRequests}
+              pagination={{ pageSize: 8 }}
+              scroll={{ x: 'max-content' }}
+              rowClassName={(request) => (selectedRequest?.id === request.id ? 'admin-request-row-selected' : '')}
+              onRow={(request) => ({
+                onClick: () => selectRequest(request, isMobile),
+                style: { cursor: 'pointer' }
+              })}
           locale={{
             emptyText: requests.length === 0 ? (
               <Empty
@@ -456,19 +606,56 @@ export default function AdminRequestsPage() {
             },
             {
               title: 'Mục đích',
-              render: (_, request) => <Typography.Text style={{ color: '#6B6F6C' }}>{ellipsisText(request.note || '—')}</Typography.Text>
+              render: (_, request) => <Typography.Text style={{ color: '#6B6F6C' }}>{ellipsisText(request.purpose || request.note || '—')}</Typography.Text>
             },
             { title: 'Trạng thái', dataIndex: 'status', render: (status: RequestStatus) => <StatusTag status={status} /> },
             { title: 'Hành động', align: 'right', render: (_, request) => actionButtons(request) }
           ]}
-        />
-      </Card>
+            />
+          </Card>
+        </Col>
+        <Col xs={24} xl={8} style={{ display: isMobile ? 'none' : undefined }}>
+          <div ref={detailPanelRef} tabIndex={-1} style={{ outline: 'none' }}>
+            <Card
+              variant="borderless"
+              style={{ borderRadius: 14, border: '1px solid #E5DECB', position: 'sticky', top: 24 }}
+              title={<span style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 500 }}>Chi tiết xử lý</span>}
+            >
+              <RequestDetailPanel request={selectedRequest} actions={actionButtons} />
+            </Card>
+          </div>
+        </Col>
+      </Row>
+      <Modal
+        title={
+          selectedRequest ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', paddingRight: 24 }}>
+              <span style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 500 }}>{getRequestCode(selectedRequest)}</span>
+              <StatusTag status={selectedRequest.status} />
+            </div>
+          ) : (
+            'Chi tiết đơn'
+          )
+        }
+        open={detailModalOpen && Boolean(selectedRequest)}
+        footer={null}
+        width="calc(100vw - 24px)"
+        centered={false}
+        style={{ top: 12, maxWidth: 560 }}
+        onCancel={() => setDetailModalOpen(false)}
+      >
+        <RequestDetailPanel request={selectedRequest} actions={actionButtons} />
+        <Button block style={{ marginTop: 14, height: 42 }} onClick={() => setDetailModalOpen(false)}>
+          Quay lại danh sách
+        </Button>
+      </Modal>
       <Modal
         title={`Từ chối yêu cầu ${rejectTarget ? getRequestCode(rejectTarget) : ''}`}
         open={Boolean(rejectTarget)}
         okText="Xác nhận từ chối"
         cancelText="Huỷ"
-        okButtonProps={{ danger: true }}
+        confirmLoading={Boolean(rejectTarget && isActionLoading('reject', rejectTarget.id))}
+        okButtonProps={{ danger: true, disabled: isAnyActionLoading && !Boolean(rejectTarget && isActionLoading('reject', rejectTarget.id)) }}
         onOk={() => rejectForm.submit()}
         onCancel={() => setRejectTarget(undefined)}
       >
@@ -483,7 +670,8 @@ export default function AdminRequestsPage() {
         open={Boolean(handoverTarget)}
         okText="Xác nhận"
         cancelText="Huỷ"
-        okButtonProps={{ disabled: !handoverChecked }}
+        confirmLoading={Boolean(handoverTarget && isActionLoading('handover', handoverTarget.id))}
+        okButtonProps={{ disabled: !handoverChecked || (isAnyActionLoading && !Boolean(handoverTarget && isActionLoading('handover', handoverTarget.id))) }}
         onOk={handleHandOver}
         onCancel={() => setHandoverTarget(undefined)}
       >
@@ -503,6 +691,7 @@ export default function AdminRequestsPage() {
         open={Boolean(returnTarget)}
         okText="Xác nhận trả"
         cancelText="Huỷ"
+        confirmLoading={Boolean(returnTarget && isActionLoading('return', returnTarget.id))}
         onOk={() => returnForm.submit()}
         onCancel={() => setReturnTarget(undefined)}
       >
@@ -516,10 +705,14 @@ export default function AdminRequestsPage() {
           <Form.Item name="condition" label="Tình trạng thiết bị" rules={[{ required: true, message: 'Chọn tình trạng thiết bị' }]}>
             <Radio.Group>
               <Space direction="vertical">
-                <Radio value="perfect">Hoàn hảo (+2đ uy tín)</Radio>
-                <Radio value="scratch">Trầy xước nhẹ (0đ)</Radio>
-                <Radio value="minor">Hỏng nhẹ (-3đ)</Radio>
-                <Radio value="lost">Hỏng nặng / mất (-10đ)</Radio>
+                {RETURN_CONDITIONS.map((condition) => (
+                  <Radio key={condition.label} value={condition.value}>
+                    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                      <span>{condition.label}</span>
+                      <Tag style={{ margin: 0, color: condition.tone, borderColor: condition.tone }}>{condition.points}</Tag>
+                    </span>
+                  </Radio>
+                ))}
               </Space>
             </Radio.Group>
           </Form.Item>

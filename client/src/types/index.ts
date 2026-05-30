@@ -5,8 +5,13 @@ export type BorrowStatus =
   | 'approved'
   | 'rejected'
   | 'borrowed'
+  | 'borrowing'
   | 'returned'
-  | 'overdue';
+  | 'returned_ontime'
+  | 'returned_late'
+  | 'overdue'
+  | 'cancelled'
+  | 'cancelled_noshow';
 
 export type DeviceStatus = 'available' | 'unavailable' | 'maintenance';
 

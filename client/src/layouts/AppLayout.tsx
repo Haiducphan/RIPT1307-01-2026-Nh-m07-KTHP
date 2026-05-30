@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MenuOutlined } from '@ant-design/icons';
 import { Button, Drawer, Layout, Menu, Space, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import { history, Outlet, useLocation } from '@umijs/max';
+import { history, Outlet, useLocation } from 'umi';
 import { ROUTES } from '@/constants/routes';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuthStore } from '@/stores/authStore';

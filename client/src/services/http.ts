@@ -1,6 +1,42 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.UMI_APP_API_BASE_URL || '/api';
+const API_BASE_URL = process.env.API_BASE_URL || '/api';
+const AUTH_STORAGE_KEYS = ['borrow_equipment_user', 'auth-storage', 'user'];
+
+type StoredRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): StoredRecord | undefined {
+  return value !== null && typeof value === 'object' ? (value as StoredRecord) : undefined;
+}
+
+function getTokenFromStoredValue(value: unknown) {
+  const parsed = asRecord(value);
+  const state = asRecord(parsed?.state);
+  const currentUser = asRecord(parsed?.currentUser);
+  const stateCurrentUser = asRecord(state?.currentUser);
+  const user = asRecord(parsed?.user);
+  const candidates = [parsed?.token, stateCurrentUser?.token, currentUser?.token, user?.token];
+
+  return candidates.find((token): token is string => typeof token === 'string' && token.length > 0);
+}
+
+function getStoredToken() {
+  if (typeof window === 'undefined') return undefined;
+
+  for (const key of AUTH_STORAGE_KEYS) {
+    const storedValue = window.localStorage.getItem(key);
+    if (!storedValue) continue;
+
+    try {
+      const token = getTokenFromStoredValue(JSON.parse(storedValue) as unknown);
+      if (token) return token;
+    } catch {
+      // Ignore malformed legacy storage values and check the next supported key.
+    }
+  }
+
+  return undefined;
+}
 
 const http = axios.create({
   baseURL: API_BASE_URL,
@@ -9,20 +45,13 @@ const http = axios.create({
   }
 });
 
-// Attach Authorization header from stored user token (if available)
 http.interceptors.request.use((config) => {
-  try {
-    const raw = localStorage.getItem('borrow_equipment_user');
-    if (raw) {
-      const user = JSON.parse(raw);
-      if (user?.token) {
-        config.headers = config.headers || {};
-        config.headers.Authorization = `Bearer ${user.token}`;
-      }
-    }
-  } catch (e) {
-    // ignore
+  const token = getStoredToken();
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 

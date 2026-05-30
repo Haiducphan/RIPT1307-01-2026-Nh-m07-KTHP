@@ -8,6 +8,18 @@ const routes = [
     component: '@/pages/login'
   },
   {
+    path: '/register',
+    component: '@/pages/register'
+  },
+  {
+    path: '/forgot-password',
+    component: '@/pages/forgot-password'
+  },
+  {
+    path: '/reset-password',
+    component: '@/pages/reset-password'
+  },
+  {
     path: '/student',
     component: '@/layouts/AppLayout',
     wrappers: ['@/wrappers/StudentGuard'],

@@ -8,7 +8,7 @@ async function getBorrowRequests(req, res) {
   try {
     const { page, limit, status } = req.query;
     
-    const result = await borrowRequestService.getBorrowRequestsService({ page, limit, status });
+    const result = await borrowRequestService.getBorrowRequests({ page, limit, status });
     
     res.json(result);
   } catch (error) {
@@ -25,7 +25,7 @@ async function getMyBorrowRequests(req, res) {
 
     const { page, limit, status } = req.query;
 
-    const result = await borrowRequestService.getMyBorrowRequestsService(userId, { page, limit, status });
+    const result = await borrowRequestService.getMyBorrowRequests(userId, { page, limit, status });
     
     res.json(result);
   } catch (error) {

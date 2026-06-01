@@ -16,7 +16,7 @@ app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:8000' }));
 app.use(express.json());
 
 // Cấp quyền truy cập công khai cho thư mục uploads
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

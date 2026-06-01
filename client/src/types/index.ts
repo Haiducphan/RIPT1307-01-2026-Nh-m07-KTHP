@@ -16,11 +16,16 @@ export type BorrowStatus =
 export type DeviceStatus = 'available' | 'unavailable' | 'maintenance';
 
 export interface User {
-  id: string;
+  id: string | number;
   fullName: string;
+  name?: string;
   email: string;
   role: UserRole;
   token?: string;
+  avatar?: string;
+  avatarUrl?: string;
+  trustScore?: number;
+  trustRank?: 'diamond' | 'gold' | 'silver' | 'bronze' | 'stone' | string;
 }
 
 export interface Device {

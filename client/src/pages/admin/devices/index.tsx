@@ -137,7 +137,8 @@ export default function AdminDevicesPage() {
   const [editingDevice, setEditingDevice] = useState<AdminDevice>();
 
   useEffect(() => {
-    if (data) setDevices(data.map(toAdminDevice));
+    const nextDevices = Array.isArray(data) ? data : [];
+    setDevices(nextDevices.map(toAdminDevice));
   }, [data]);
 
   const stats = useMemo(() => {

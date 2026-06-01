@@ -22,7 +22,9 @@ interface EquipmentResponse {
 }
 
 interface EquipmentListResponse {
-  data?: EquipmentResponse[];
+  data?: EquipmentResponse[] | { rows?: EquipmentResponse[]; items?: EquipmentResponse[] };
+  rows?: EquipmentResponse[];
+  items?: EquipmentResponse[];
 }
 
 const CATEGORY_BY_ID: Record<number, string> = {
@@ -59,7 +61,7 @@ export function normalizeDevice(raw: EquipmentResponse): Device {
   const image = raw.images?.find((item) => item.isPrimary && item.imageUrl)?.imageUrl ?? images[0];
 
   return {
-    id: raw.id,
+    id: String(raw.id ?? ''),
     name: raw.name ?? '',
     description: raw.description ?? '',
     category: raw.category ?? raw.categoryName ?? CATEGORY_BY_ID[raw.categoryId ?? -1] ?? 'Khác',
@@ -71,9 +73,21 @@ export function normalizeDevice(raw: EquipmentResponse): Device {
   };
 }
 
+function extractEquipmentArray(response: EquipmentResponse[] | EquipmentListResponse): EquipmentResponse[] {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response.data)) return response.data;
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.rows)) return response.data.rows;
+    if (Array.isArray(response.data.items)) return response.data.items;
+  }
+  if (Array.isArray(response.rows)) return response.rows;
+  if (Array.isArray(response.items)) return response.items;
+  return [];
+}
+
 export function getDevices() {
   return apiGet<EquipmentResponse[] | EquipmentListResponse>('/equipment').then((response) => {
-    const devices = Array.isArray(response) ? response : response.data ?? [];
+    const devices = extractEquipmentArray(response);
     return devices.map(normalizeDevice);
   });
 }

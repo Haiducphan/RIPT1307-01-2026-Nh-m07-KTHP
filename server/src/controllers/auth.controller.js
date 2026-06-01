@@ -1,5 +1,5 @@
 const authService = require('../services/auth.service');
-
+const Student = require('../models/student.model');
 // Đăng nhập
 async function login(req, res) {
   const { email, password } = req.body || {};
@@ -79,7 +79,7 @@ async function me(req, res) {
   if (!req.user) return res.status(401).json({ message: 'Unauthenticated' });
 
   try {
-    let userData = { 
+    let userData = {
       id: req.user.id,
       email: req.user.email,
       fullName: req.user.fullName,

@@ -1,7 +1,7 @@
 import { Button, Checkbox, Col, Form, Input, message, Row, Typography } from 'antd';
 import { history, Link } from 'umi';
 import { ROUTES } from '@/constants/routes';
-import { login } from '@/services/auth';
+import { getMe, login } from '@/services/auth';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserRole } from '@/types';
 
@@ -19,9 +19,12 @@ export default function LoginPage() {
     try {
       const user = await login(values);
       signIn(user);
-      history.push(user.role === 'admin' ? ROUTES.adminRequests : ROUTES.studentDevices);
+      const latestUser = await getMe();
+      const syncedUser = { ...latestUser, token: user.token };
+      signIn(syncedUser);
+      history.push(syncedUser.role === 'admin' ? ROUTES.adminRequests : ROUTES.studentDevices);
     } catch {
-      message.error('Dang nhap that bai');
+      message.error('Đăng nhập thất bại');
     }
   };
 

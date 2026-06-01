@@ -165,7 +165,10 @@ export default function StudentDevicesPage() {
               margin: '0 0 8px'
             }}
           >
-            Xin chào, <em style={{ color: '#2D4A3E' }}>{getDisplayName(currentUser?.fullName)}</em>
+            Xin chào,{' '}
+            <span style={{ color: '#2D4A3E', fontStyle: 'normal', letterSpacing: 0, wordBreak: 'normal', whiteSpace: 'normal' }}>
+              {getDisplayName(currentUser?.fullName)}
+            </span>
           </h1>
           <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
             Có {availableCount} thiết bị đang sẵn sàng cho bạn mượn hôm nay.

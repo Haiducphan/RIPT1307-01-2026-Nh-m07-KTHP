@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
-import { MenuOutlined } from '@ant-design/icons';
-import { Button, Drawer, Layout, Menu, Space, Typography } from 'antd';
+import {
+  AppstoreOutlined,
+  BarChartOutlined,
+  CheckSquareOutlined,
+  ClockCircleOutlined,
+  DatabaseOutlined,
+  LogoutOutlined,
+  MenuOutlined,
+  SendOutlined,
+  UserOutlined
+} from '@ant-design/icons';
+import { Avatar, Button, Drawer, Layout, Menu, Space, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { history, Outlet, useLocation } from 'umi';
 import { ROUTES } from '@/constants/routes';
@@ -9,11 +19,37 @@ import { useAuthStore } from '@/stores/authStore';
 
 const { Header, Content, Sider } = Layout;
 const MOBILE_BREAKPOINT = 768;
+const RANK_LABEL: Record<string, string> = {
+  diamond: 'Kim cương',
+  gold: 'Vàng',
+  silver: 'Bạc',
+  bronze: 'Đồng',
+  stone: 'Đá'
+};
+
+function getDisplayName(fullName?: string, name?: string) {
+  const displayName = (fullName || name || '').trim();
+  return displayName || 'Người dùng';
+}
+
+function getInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .slice(-2)
+    .join('')
+    .toUpperCase();
+}
 
 export default function AppLayout() {
   const location = useLocation();
   const { currentUser, signOut } = useAuthStore();
   const isAdmin = currentUser?.role === 'admin';
+  const displayName = getDisplayName(currentUser?.fullName, currentUser?.name);
+  const avatarUrl = currentUser?.avatarUrl || currentUser?.avatar;
+  const trustScore = typeof currentUser?.trustScore === 'number' ? currentUser.trustScore : 0;
+  const trustRank = currentUser?.trustRank ? RANK_LABEL[currentUser.trustRank] ?? currentUser.trustRank : 'Đá';
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
   );
@@ -37,16 +73,16 @@ export default function AppLayout() {
   };
 
   const studentItems: MenuProps['items'] = [
-    { key: ROUTES.studentDevices, label: 'Danh sach thiet bi' },
-    { key: ROUTES.studentBorrow, label: 'Gui yeu cau muon' },
-    { key: ROUTES.studentRequests, label: 'Lich su muon' }
+    { key: ROUTES.studentDevices, icon: <AppstoreOutlined />, label: 'Danh sách thiết bị' },
+    { key: ROUTES.studentBorrow, icon: <SendOutlined />, label: 'Gửi yêu cầu mượn' },
+    { key: ROUTES.studentRequests, icon: <ClockCircleOutlined />, label: 'Lịch sử mượn' }
   ];
 
   const adminItems: MenuProps['items'] = [
-    { key: ROUTES.adminRequests, label: 'Yeu cau muon' },
-    { key: ROUTES.adminDevices, label: 'Quan ly kho' },
-    { key: ROUTES.adminReturns, label: 'Ghi nhan tra' },
-    { key: ROUTES.adminStatistics, label: 'Thong ke' }
+    { key: ROUTES.adminRequests, icon: <CheckSquareOutlined />, label: 'Yêu cầu mượn' },
+    { key: ROUTES.adminDevices, icon: <DatabaseOutlined />, label: 'Quản lý kho' },
+    { key: ROUTES.adminReturns, icon: <ClockCircleOutlined />, label: 'Ghi nhận trả' },
+    { key: ROUTES.adminStatistics, icon: <BarChartOutlined />, label: 'Thống kê' }
   ];
 
   const menuItems = isAdmin ? adminItems : studentItems;
@@ -71,14 +107,14 @@ export default function AppLayout() {
       {!isMobile && (
         <Sider theme="light" width={240}>
           <Typography.Title level={4} style={{ padding: '20px 16px 8px' }}>
-            Muon do dung
+            Mượn đồ dùng
           </Typography.Title>
           {renderMenu()}
         </Sider>
       )}
 
       <Drawer
-        title="Muon do dung"
+        title="Mượn đồ dùng"
         placement="left"
         width={240}
         open={isMobile && drawerOpen}
@@ -104,11 +140,25 @@ export default function AppLayout() {
           ) : (
             <span />
           )}
-          <Space style={{ marginLeft: 'auto' }} size={isMobile ? 8 : 12}>
-            <Typography.Text ellipsis style={{ maxWidth: isMobile ? 130 : 240 }}>
-              {currentUser?.fullName}
-            </Typography.Text>
-            <Button onClick={handleSignOut}>Dang xuat</Button>
+          <Space style={{ marginLeft: 'auto', minWidth: 0 }} size={isMobile ? 8 : 12} align="center">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <Avatar src={avatarUrl} icon={!avatarUrl ? <UserOutlined /> : undefined} style={{ flex: '0 0 auto', background: '#2D4A3E', color: '#F5EBD0' }}>
+                {!avatarUrl ? getInitials(displayName) : null}
+              </Avatar>
+              <div style={{ display: isMobile ? 'none' : 'grid', minWidth: 0, lineHeight: 1.25 }}>
+                <Typography.Text ellipsis style={{ maxWidth: 240, fontWeight: 700, color: '#1A1F1B' }}>
+                  {displayName}
+                </Typography.Text>
+                {!isAdmin && (
+                  <Typography.Text ellipsis style={{ maxWidth: 240, color: '#6B6F6C', fontSize: 12 }}>
+                    Hạng {trustRank} · {trustScore} điểm uy tín
+                  </Typography.Text>
+                )}
+              </div>
+            </div>
+            <Button icon={<LogoutOutlined />} onClick={handleSignOut}>
+              {isMobile ? '' : 'Đăng xuất'}
+            </Button>
           </Space>
         </Header>
         <Content style={{ padding: isMobile ? 12 : 24, overflowX: 'hidden' }}>

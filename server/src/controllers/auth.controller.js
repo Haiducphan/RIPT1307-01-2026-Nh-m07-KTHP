@@ -75,9 +75,31 @@ async function resetPassword(req, res) {
   }
 }
 
-function me(req, res) {
-  if (!req.user) return res.status(401).json({ message: 'Chưa xác thực' });
-  res.json(req.user);
+async function me(req, res) {
+  if (!req.user) return res.status(401).json({ message: 'Unauthenticated' });
+
+  try {
+    let userData = { 
+      id: req.user.id,
+      email: req.user.email,
+      fullName: req.user.fullName,
+      role: req.user.role
+    };
+
+    if (req.user.role === 'student') {
+      const studentInfo = await Student.findOne({ where: { userId: req.user.id } });
+      if (studentInfo) {
+        userData.avatarUrl = studentInfo.avatarUrl;
+        userData.trustScore = studentInfo.trustScore;
+        userData.trustRank = studentInfo.trustRank;
+      }
+    }
+
+    res.json({ message: 'Thành công', data: userData });
+  } catch (error) {
+    console.error('Lỗi API /me:', error.message);
+    res.status(500).json({ message: 'Lỗi server khi lấy thông tin cá nhân' });
+  }
 }
 
 

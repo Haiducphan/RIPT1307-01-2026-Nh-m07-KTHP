@@ -2,7 +2,7 @@ const { Op } = require('sequelize');
 const Equipment = require('../models/equipment.model');
 const EquipmentImage = require('../models/equipmentImages.model');
 const sequelize = require('../config/database'); 
-const auditLogService = require('./auditLog.service'); // Tích hợp ghi log
+const auditLogService = require('./auditLog.service'); 
 
 // Lấy danh sách thiết bị
 async function listEquipment({ tier, conditionStatus, page = 1, limit = 12, includeInactive = false } = {}) {
@@ -43,9 +43,17 @@ async function getEquipmentById(id, { includeDeleted = false } = {}) {
 // Tạo thiết bị mới kèm ảnh
 async function createEquipment(payload, files) {
   if (!payload.code || !payload.name || !payload.categoryId || !payload.tier) {
-    const err = new Error('Thiếu trường bắt buộc: code, name, categoryId, tier');
-    err.status = 400;
-    throw err;
+    throw { status: 400, message: 'Thiếu trường bắt buộc: code, name, categoryId, tier' };
+  }
+
+  // Kiểm tra trùng mã thiết bị (Lỗi 409)
+  const existing = await Equipment.findOne({ where: { code: payload.code } });
+  if (existing) {
+    const statusText = existing.isActive ? 'Đang hoạt động' : 'Đã bị ẩn/Ngưng sử dụng';
+    throw { 
+      status: 409, 
+      message: `Mã thiết bị ${payload.code} đã tồn tại (Trạng thái: ${statusText}). Vui lòng chọn mã khác hoặc khôi phục thiết bị cũ.` 
+    };
   }
 
   const transaction = await sequelize.transaction();
@@ -96,8 +104,21 @@ async function createEquipment(payload, files) {
 
 // Cập nhật thiết bị
 async function updateEquipment(id, payload, files, adminId) {
-  const equipment = await Equipment.findOne({ where: { id, isActive: true } });
-  if (!equipment) return null;
+  // Lấy cả thiết bị đang active và inactive để cho phép sửa cả khi đang ẩn
+  const equipment = await Equipment.findOne({ where: { id } });
+  if (!equipment) throw { status: 404, message: 'Không tìm thấy thiết bị' };
+
+  // Kiểm tra trùng mã
+  if (payload.code && payload.code !== equipment.code) {
+    const existing = await Equipment.findOne({ where: { code: payload.code } });
+    if (existing) {
+      const statusText = existing.isActive ? 'Đang hoạt động' : 'Đã bị ẩn/Ngưng sử dụng';
+      throw { 
+        status: 409, 
+        message: `Mã thiết bị ${payload.code} đã tồn tại ở thiết bị khác (Trạng thái: ${statusText}).` 
+      };
+    }
+  }
 
   const transaction = await sequelize.transaction();
 
@@ -125,10 +146,10 @@ async function updateEquipment(id, payload, files, adminId) {
       await EquipmentImage.bulkCreate(imageData, { transaction });
     }
 
-    // Xử lý ảnh bị xóa
+    // Xử lý ảnh bị xóa (FE truyền lên mảng id các ảnh muốn xoá)
     if (payload.deletedImageIds) {
       let idsToDelete = typeof payload.deletedImageIds === 'string' ? payload.deletedImageIds.split(',') : payload.deletedImageIds;
-      if(idsToDelete.length > 0) {
+      if (idsToDelete.length > 0) {
         await EquipmentImage.destroy({ where: { id: idsToDelete, equipmentId: id }, transaction });
       }
     }
@@ -138,41 +159,47 @@ async function updateEquipment(id, payload, files, adminId) {
       action: 'update_equipment',
       entityType: 'equipment',
       entityId: id,
-      oldValue: { name: oldData.name, tier: oldData.tier },
-      newValue: { name: equipment.name, tier: equipment.tier }
+      oldValue: { code: oldData.code, name: oldData.name, tier: oldData.tier },
+      newValue: { code: equipment.code, name: equipment.name, tier: equipment.tier }
     }, transaction);
 
     await transaction.commit();
-    return getEquipmentById(id);
+    return getEquipmentById(id, { includeDeleted: true });
   } catch (error) {
     await transaction.rollback();
     throw error;
   }
 }
 
-// Xoá mềm thiết bị
-async function softDeleteEquipment(id, adminId) {
-  const equipment = await Equipment.findOne({ where: { id, isActive: true } });
-  if (!equipment) return null;
-  
-  await equipment.update({ isActive: false }); 
+// Bật/Tắt (Khôi phục) thiết bị
+async function toggleEquipmentStatus(id, adminId) {
+  const equipment = await Equipment.findByPk(id);
+  if (!equipment) throw { status: 404, message: 'Không tìm thấy thiết bị' };
+
+  const newStatus = !equipment.isActive;
+  await equipment.update({ isActive: newStatus });
 
   await auditLogService.logAdminAction({
     userId: adminId,
-    action: 'delete_equipment',
+    action: newStatus ? 'restore_equipment' : 'deactivate_equipment',
     entityType: 'equipment',
     entityId: id,
-    oldValue: { isActive: true },
-    newValue: { isActive: false }
+    oldValue: { isActive: !newStatus },
+    newValue: { isActive: newStatus }
   });
 
   return equipment;
 }
 
+// Xoá mềm thiết bị
+async function softDeleteEquipment(id, adminId) {
+  return toggleEquipmentStatus(id, adminId);
+}
+
 // Cập nhật kho thủ công
 async function updateStock(id, { totalQuantity }, adminId) {
   const equipment = await Equipment.findOne({ where: { id, isActive: true } });
-  if (!equipment) throw { status: 404, message: 'Thiết bị không tồn tại' };
+  if (!equipment) throw { status: 404, message: 'Thiết bị không tồn tại hoặc đang bị ẩn' };
   if (totalQuantity !== undefined && totalQuantity < 0) throw { status: 400, message: 'Tổng số lượng không được âm' };
 
   if (totalQuantity !== undefined) {
@@ -206,5 +233,6 @@ module.exports = {
   createEquipment, 
   updateEquipment, 
   softDeleteEquipment, 
+  toggleEquipmentStatus,
   updateStock,
 };

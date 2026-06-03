@@ -9,5 +9,6 @@ router.get('/:id', optionalAuthenticateJWT, equipmentController.getDeviceById);
 router.post('/', authenticateJWT, authorizeRole('admin'), uploadEquipmentImages.array('images', 5), equipmentController.createDevice);
 router.delete('/:id', authenticateJWT, authorizeRole('admin'), equipmentController.deleteDevice);
 router.patch('/:id/stock', authenticateJWT, authorizeRole('admin'), equipmentController.updateStock);
+router.patch('/:id/toggle-status', equipmentController.toggleStatus);
 
 module.exports = router;

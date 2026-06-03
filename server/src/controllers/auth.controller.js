@@ -1,5 +1,6 @@
 const authService = require('../services/auth.service');
 const Student = require('../models/student.model');
+const Admin = require('../models/admin.model');
 // Đăng nhập
 async function login(req, res) {
   const { email, password } = req.body || {};
@@ -95,6 +96,15 @@ async function me(req, res) {
       }
     }
 
+    if (req.user.role === 'admin') {
+      const adminInfo = await Admin.findOne({ where: { userId: req.user.id } });
+      if (adminInfo) {
+        userData.fullName = adminInfo.fullName || userData.fullName;
+        userData.phone = adminInfo.phone;
+        userData.avatarUrl = adminInfo.avatarUrl;
+      }
+    }
+
     res.json({ message: 'Thành công', data: userData });
   } catch (error) {
     console.error('Lỗi API /me:', error.message);
@@ -102,5 +112,47 @@ async function me(req, res) {
   }
 }
 
+async function updateMyAvatar(req, res) {
+  if (!req.user) return res.status(401).json({ message: 'Unauthenticated' });
 
-module.exports = { login, register, forgotPassword, resetPassword, me, };
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Vui lòng chọn một bức ảnh để tải lên' });
+    }
+
+    const fileUrl = `/uploads/avatars/${req.file.filename}`;
+
+    if (req.user.role === 'student') {
+      const studentInfo = await Student.findOne({ where: { userId: req.user.id } });
+      if (!studentInfo) {
+        return res.status(404).json({ message: 'Không tìm thấy hồ sơ sinh viên' });
+      }
+
+      await studentInfo.update({ avatarUrl: fileUrl });
+      return res.json({
+        message: 'Cập nhật ảnh đại diện thành công',
+        avatarUrl: studentInfo.avatarUrl
+      });
+    }
+
+    if (req.user.role === 'admin') {
+      const adminInfo = await Admin.findOne({ where: { userId: req.user.id } });
+      if (!adminInfo) {
+        return res.status(404).json({ message: 'Không tìm thấy hồ sơ admin' });
+      }
+
+      await adminInfo.update({ avatarUrl: fileUrl });
+      return res.json({
+        message: 'Cập nhật ảnh đại diện thành công',
+        avatarUrl: adminInfo.avatarUrl
+      });
+    }
+
+    return res.status(403).json({ message: 'Tài khoản không được hỗ trợ cập nhật ảnh đại diện' });
+  } catch (error) {
+    console.error('Lỗi cập nhật avatar:', error.message);
+    return res.status(500).json({ message: 'Lỗi hệ thống khi cập nhật ảnh đại diện' });
+  }
+}
+
+module.exports = { login, register, forgotPassword, resetPassword, me, updateMyAvatar };

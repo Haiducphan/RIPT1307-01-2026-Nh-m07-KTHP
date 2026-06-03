@@ -1,4 +1,5 @@
 const sequelize = require('./database');
+const { DataTypes } = require('sequelize');
 
 // Require tất cả các Model của hệ thống
 const User = require('../models/user.model');
@@ -15,12 +16,26 @@ const EmailTemplate = require('../models/emailTemplate.model');
 const Notification = require('../models/notification.model');
 const SystemSetting = require('../models/systemSetting.model');
 
+async function ensureAdminAvatarColumn() {
+  const queryInterface = sequelize.getQueryInterface();
+  const adminsTable = await queryInterface.describeTable('admins');
+
+  if (!adminsTable.avatar_url) {
+    await queryInterface.addColumn('admins', 'avatar_url', {
+      type: DataTypes.STRING(500),
+      allowNull: true
+    });
+    console.log('Đã bổ sung cột avatar_url cho bảng admins.');
+  }
+}
+
 async function syncDatabase() {
   try {
     await sequelize.authenticate();
     console.log('Kết nối Database thành công!');
     
     await sequelize.sync(); 
+    await ensureAdminAvatarColumn();
     console.log('Sync toàn bộ Database thành công!');
 
     // Khởi tạo cấu hình hệ thống mặc định

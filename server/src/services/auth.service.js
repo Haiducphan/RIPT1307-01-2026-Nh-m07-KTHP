@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/user.model');
 const Student = require('../models/student.model');
+const Admin = require('../models/admin.model');
 const sequelize = require('../config/database');
 const emailService = require('./email.service');
 
@@ -20,11 +21,23 @@ async function loginUser(email, password) {
   }
 
   let fullName = user.email.split('@')[0];
+  let avatarUrl = null;
   
   // Nếu là sinh viên, lấy tên thật từ bảng students
   if (user.role === 'student') {
     const student = await Student.findOne({ where: { userId: user.id } });
-    if (student) fullName = student.fullName;
+    if (student) {
+      fullName = student.fullName;
+      avatarUrl = student.avatarUrl;
+    }
+  }
+
+  if (user.role === 'admin') {
+    const admin = await Admin.findOne({ where: { userId: user.id } });
+    if (admin) {
+      fullName = admin.fullName || fullName;
+      avatarUrl = admin.avatarUrl;
+    }
   }
 
   const token = jwt.sign(
@@ -38,6 +51,7 @@ async function loginUser(email, password) {
     fullName,
     email: user.email,
     role: user.role,
+    avatarUrl,
     token
   };
 }

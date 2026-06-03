@@ -7,8 +7,15 @@ const uploadEquipmentImages = require('../middleware/upload.middleware');
 router.get('/', optionalAuthenticateJWT, equipmentController.getDevices);
 router.get('/:id', optionalAuthenticateJWT, equipmentController.getDeviceById);
 router.post('/', authenticateJWT, authorizeRole('admin'), uploadEquipmentImages.array('images', 5), equipmentController.createDevice);
+router.put(
+  '/:id',
+  authenticateJWT,
+  authorizeRole('admin'),
+  uploadEquipmentImages.array('images', 5),
+  equipmentController.updateDevice
+);
 router.delete('/:id', authenticateJWT, authorizeRole('admin'), equipmentController.deleteDevice);
 router.patch('/:id/stock', authenticateJWT, authorizeRole('admin'), equipmentController.updateStock);
-router.patch('/:id/toggle-status', equipmentController.toggleStatus);
+router.patch('/:id/toggle-status', authenticateJWT, authorizeRole('admin'), equipmentController.toggleStatus);
 
 module.exports = router;

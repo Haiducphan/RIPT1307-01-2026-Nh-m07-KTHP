@@ -5,9 +5,12 @@ import EquipmentCard from '@/components/EquipmentCard';
 import StatsCard from '@/components/StatsCard';
 import TrustRankBadge from '@/components/TrustRankBadge';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { getMyBorrowRequests } from '@/services/borrowRequests';
+import type { NormalizedBorrowRequest } from '@/services/borrowRequests';
 import { getDevices } from '@/services/devices';
 import { useAuthStore } from '@/stores/authStore';
 import type { Device } from '@/types';
+import type { BorrowStatus } from '@/types';
 
 type TrustRankValue = 'diamond' | 'gold' | 'silver' | 'bronze' | 'stone';
 type DeviceTier = 'S' | 'A' | 'B' | 'C';
@@ -17,13 +20,8 @@ type DisplayDevice = Device & {
 };
 
 const FILTERS = ['Tất cả', 'Âm thanh', 'Hình ảnh', 'Trình chiếu', 'Phụ kiện', '⚡ Còn hàng'];
-
-const MOCK_STATS = {
-  borrowing: 1,
-  pending: 1,
-  returned: 12,
-  streak: 5
-};
+const ACTIVE_BORROW_STATUSES: BorrowStatus[] = ['borrowed', 'borrowing', 'overdue'];
+const RETURNED_STATUSES: BorrowStatus[] = ['returned', 'returned_ontime', 'returned_late'];
 
 function normalizeText(value: string) {
   return value
@@ -98,17 +96,37 @@ function matchFilter(device: Device, filter: string) {
   return true;
 }
 
+function getRequestTime(request: NormalizedBorrowRequest) {
+  return new Date(request.createdAt || request.returnDate || request.borrowDate || 0).getTime();
+}
+
+function calculateGoodReturnStreak(requests: NormalizedBorrowRequest[]) {
+  const completedRequests = [...requests]
+    .filter((request) => RETURNED_STATUSES.includes(request.status))
+    .sort((first, second) => getRequestTime(second) - getRequestTime(first));
+
+  let streak = 0;
+  for (const request of completedRequests) {
+    if (request.status !== 'returned_ontime' && request.status !== 'returned') break;
+    streak += 1;
+  }
+
+  return streak;
+}
+
 export default function StudentDevicesPage() {
   const { currentUser } = useAuthStore();
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
   const { data: devices = [], loading } = useAsyncData(getDevices);
+  const { data: myRequests = [] } = useAsyncData(getMyBorrowRequests);
   const [searchText, setSearchText] = useState('');
   const [activeFilter, setActiveFilter] = useState(FILTERS[0]);
 
   const userMeta = currentUser as (typeof currentUser & {
     trustScore?: number;
     trustRank?: TrustRankValue;
+    goodReturnStreak?: number;
   });
 
   const displayDevices = useMemo<DisplayDevice[]>(
@@ -136,6 +154,17 @@ export default function StudentDevicesPage() {
       return matchesSearch && matchFilter(device, activeFilter);
     });
   }, [activeFilter, displayDevices, searchText]);
+
+  const studentStats = useMemo(() => {
+    const borrowing = myRequests
+      .filter((request) => ACTIVE_BORROW_STATUSES.includes(request.status))
+      .reduce((total, request) => total + request.quantity, 0);
+    const pending = myRequests.filter((request) => request.status === 'pending').length;
+    const returned = myRequests.filter((request) => RETURNED_STATUSES.includes(request.status)).length;
+    const streak = typeof userMeta?.goodReturnStreak === 'number' ? userMeta.goodReturnStreak : calculateGoodReturnStreak(myRequests);
+
+    return { borrowing, pending, returned, streak };
+  }, [myRequests, userMeta?.goodReturnStreak]);
 
   const handleBorrow = (device: Device) => {
     history.push(`/student/borrow?deviceId=${device.id}`);
@@ -180,16 +209,16 @@ export default function StudentDevicesPage() {
 
       <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
         <Col xs={24} md={12} xl={6}>
-          <StatsCard title="ĐANG MƯỢN" value={MOCK_STATS.borrowing} meta="thiết bị" />
+          <StatsCard title="ĐANG MƯỢN" value={studentStats.borrowing} meta="thiết bị" />
         </Col>
         <Col xs={24} md={12} xl={6}>
-          <StatsCard title="CHỜ DUYỆT" value={MOCK_STATS.pending} meta="yêu cầu" />
+          <StatsCard title="CHỜ DUYỆT" value={studentStats.pending} meta="yêu cầu" />
         </Col>
         <Col xs={24} md={12} xl={6}>
-          <StatsCard title="ĐÃ TỪNG MƯỢN" value={MOCK_STATS.returned} meta="lượt thành công" />
+          <StatsCard title="ĐÃ TỪNG MƯỢN" value={studentStats.returned} meta="lượt thành công" />
         </Col>
         <Col xs={24} md={12} xl={6}>
-          <StatsCard title="CHUỖI TỐT" value={MOCK_STATS.streak} meta="+7đ thưởng 🎉" featured />
+          <StatsCard title="CHUỖI TỐT" value={studentStats.streak} meta="lần trả tốt liên tiếp" featured />
         </Col>
       </Row>
 

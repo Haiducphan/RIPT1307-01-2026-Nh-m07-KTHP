@@ -25,9 +25,10 @@ import dayjs from 'dayjs';
 import { approveBorrowRequest, getBorrowRequests, handoverBorrowRequest, markReturned, rejectBorrowRequest } from '@/services/borrowRequests';
 import type { NormalizedBorrowRequest } from '@/services/borrowRequests';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { BORROW_STATUS_COLOR, BORROW_STATUS_LABEL } from '@/constants/borrowStatus';
 import type { BorrowRequest } from '@/types';
 type RequestStatus = BorrowRequest['status'];
-type RequestTab = 'all' | 'pending' | 'approved' | 'borrowed' | 'returned' | 'overdue';
+type RequestTab = 'all' | 'pending' | 'approved' | 'borrowing' | 'returned' | 'overdue';
 type AdminActionType = 'approve' | 'reject' | 'handover' | 'return';
 interface AdminRequest extends Omit<BorrowRequest, 'id' | 'status'> {
   id: string | number;
@@ -50,7 +51,21 @@ interface ReturnFormValues {
   note?: string;
 }
 const { RangePicker } = DatePicker;
-const STATUS_CONFIG: Record<RequestStatus, { label: string; description: string; color: string; bg: string }> = {
+const STATUS_DESCRIPTION: Record<RequestStatus, string> = {
+  pending: 'Cần admin xét duyệt',
+  approved: 'Chờ bàn giao',
+  borrowed: 'Chờ ghi nhận trả',
+  borrowing: 'Chờ ghi nhận trả',
+  returned: 'Hoàn tất',
+  returned_ontime: 'Trả đúng hạn',
+  returned_late: 'Trả trễ hạn',
+  cancelled: 'Sinh viên đã huỷ',
+  canceled: 'Sinh viên đã huỷ',
+  cancelled_noshow: 'Không đến nhận',
+  rejected: 'Admin đã từ chối',
+  overdue: 'Cần ghi nhận trả'
+};
+const STATUS_TONE: Record<RequestStatus, { color: string; bg: string; label?: string; description?: string }> = {
   pending: { label: 'Chờ duyệt', description: 'Cần admin xét duyệt', color: '#8B6A1F', bg: '#F5EBD0' },
   approved: { label: 'Đã duyệt', description: 'Chờ bàn giao', color: '#2563EB', bg: '#DCE4F0' },
   borrowed: { label: 'Đang mượn', description: 'Chờ ghi nhận trả', color: '#6D4A8F', bg: '#E8DEF0' },
@@ -59,11 +74,12 @@ const STATUS_CONFIG: Record<RequestStatus, { label: string; description: string;
   returned_ontime: { label: 'Đã trả', description: 'Trả đúng hạn', color: '#2F6F3E', bg: '#E1EFE3' },
   returned_late: { label: 'Đã trả', description: 'Trả trễ hạn', color: '#8B6A1F', bg: '#F5EBD0' },
   cancelled: { label: 'Đã huỷ', description: 'Sinh viên đã huỷ', color: '#6B6F6C', bg: '#ECEEF2' },
+  canceled: { label: 'Đã huỷ', description: 'Sinh viên đã huỷ', color: '#6B6F6C', bg: '#ECEEF2' },
   cancelled_noshow: { label: 'Đã huỷ', description: 'Không đến nhận', color: '#6B6F6C', bg: '#ECEEF2' },
   rejected: { label: 'Đã từ chối', description: 'Admin đã từ chối', color: '#9B3E33', bg: '#F2DDD7' },
   overdue: { label: 'Quá hạn', description: 'Cần ghi nhận trả', color: '#7A241B', bg: '#F2DDD7' }
 };
-const BORROWING_STATUSES: RequestStatus[] = ['borrowed', 'borrowing', 'overdue'];
+const BORROWING_STATUSES: RequestStatus[] = ['borrowing', 'overdue'];
 const RETURNED_STATUSES: RequestStatus[] = ['returned', 'returned_ontime', 'returned_late'];
 const RETURN_CONDITIONS = [
   { value: 'perfect', label: 'Hoàn hảo', points: '+2đ uy tín', tone: '#2F6F3E' },
@@ -131,13 +147,13 @@ function toAdminRequest(request: NormalizedBorrowRequest): AdminRequest {
   };
 }
 function StatusTag({ status }: { status: RequestStatus }) {
-  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
+  const tone = STATUS_TONE[status] ?? STATUS_TONE.pending;
   return (
     <div style={{ display: 'grid', gap: 4, justifyItems: 'start' }}>
-      <Tag style={{ border: 'none', borderRadius: 999, color: config.color, background: config.bg, fontWeight: 700, margin: 0 }}>
-        {config.label}
+      <Tag color={BORROW_STATUS_COLOR[status]} style={{ border: 'none', borderRadius: 999, color: tone.color, background: tone.bg, fontWeight: 700, margin: 0 }}>
+        {BORROW_STATUS_LABEL[status] ?? status}
       </Tag>
-      <span style={{ color: '#8A8E88', fontSize: 12 }}>{config.description}</span>
+      <span style={{ color: '#8A8E88', fontSize: 12 }}>{STATUS_DESCRIPTION[status] ?? 'Chưa có dữ liệu'}</span>
     </div>
   );
 }
@@ -215,7 +231,7 @@ function RequestDetailPanel({ request, actions }: { request?: AdminRequest; acti
 export default function AdminRequestsPage() {
   const [rejectForm] = Form.useForm<RejectFormValues>();
   const [returnForm] = Form.useForm<ReturnFormValues>();
-  const { data, loading, refresh } = useAsyncData(getBorrowRequests);
+  const { data, loading, refresh } = useAsyncData(() => getBorrowRequests({ page: 1, limit: 1000 }));
   const [requests, setRequests] = useState<AdminRequest[]>([]);
   const [activeTab, setActiveTab] = useState<RequestTab>('all');
   const [searchText, setSearchText] = useState('');
@@ -253,7 +269,7 @@ export default function AdminRequestsPage() {
       all: requests.length,
       pending: requests.filter((item) => item.status === 'pending').length,
       approved: requests.filter((item) => item.status === 'approved').length,
-      borrowed: requests.filter((item) => BORROWING_STATUSES.includes(item.status)).length,
+      borrowed: requests.filter((item) => item.status === 'borrowing').length,
       returned: requests.filter((item) => RETURNED_STATUSES.includes(item.status)).length,
       overdue: requests.filter((item) => item.status === 'overdue').length
     }),
@@ -265,7 +281,7 @@ export default function AdminRequestsPage() {
       const matchesTab =
         activeTab === 'all' ||
         request.status === activeTab ||
-        (activeTab === 'borrowed' && BORROWING_STATUSES.includes(request.status)) ||
+        (activeTab === 'borrowing' && request.status === 'borrowing') ||
         (activeTab === 'returned' && RETURNED_STATUSES.includes(request.status));
       const matchesSearch =
         !keyword ||
@@ -468,7 +484,7 @@ export default function AdminRequestsPage() {
     { key: 'all', label: `Tất cả (${counts.all})` },
     { key: 'pending', label: `Chờ duyệt (${counts.pending})` },
     { key: 'approved', label: `Đã duyệt (${counts.approved})` },
-    { key: 'borrowed', label: `Đang mượn (${counts.borrowed})` },
+    { key: 'borrowing', label: `Đang mượn (${counts.borrowed})` },
     { key: 'returned', label: `Đã trả (${counts.returned})` },
     { key: 'overdue', label: `Quá hạn (${counts.overdue})` }
   ];
@@ -507,9 +523,9 @@ export default function AdminRequestsPage() {
           }
         `}
       </style>
-      <Row gutter={[24, 24]} align="top">
-        <Col xs={24} xl={16}>
-          <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
+      <Row gutter={[18, 18]} align="top" style={{ minWidth: 0 }}>
+        <Col xs={24} xl={15} style={{ minWidth: 0 }}>
+          <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB', overflow: 'hidden' }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
               <Input.Search
                 allowClear
@@ -529,7 +545,7 @@ export default function AdminRequestsPage() {
               loading={{ spinning: loading, tip: 'Đang tải yêu cầu...' }}
               dataSource={filteredRequests}
               pagination={{ pageSize: 8 }}
-              scroll={{ x: 'max-content' }}
+              scroll={{ x: 960 }}
               rowClassName={(request) => (selectedRequest?.id === request.id ? 'admin-request-row-selected' : '')}
               onRow={(request) => ({
                 onClick: () => selectRequest(request, isMobile),
@@ -581,9 +597,10 @@ export default function AdminRequestsPage() {
             )
           }}
           columns={[
-            { title: 'Mã đơn', render: (_, request) => <Typography.Text strong>{getRequestCode(request)}</Typography.Text> },
+            { title: 'Mã đơn', width: 110, render: (_, request) => <Typography.Text strong>{getRequestCode(request)}</Typography.Text> },
             {
               title: 'Sinh viên',
+              width: 190,
               render: (_, request) => (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Avatar style={{ background: '#2D4A3E', color: '#F5EBD0' }}>{getInitials(request.studentName)}</Avatar>
@@ -596,25 +613,28 @@ export default function AdminRequestsPage() {
             },
             {
               title: 'Thiết bị',
+              width: 180,
               render: (_, request) => (
                 <span>{getDeviceIcon(request.deviceName)} {request.deviceName} × {request.quantity}</span>
               )
             },
             {
               title: 'Ngày mượn → trả',
+              width: 135,
               render: (_, request) => `${formatDate(request.borrowDate)} → ${formatDate(request.returnDate)}`
             },
             {
               title: 'Mục đích',
+              width: 160,
               render: (_, request) => <Typography.Text style={{ color: '#6B6F6C' }}>{ellipsisText(request.purpose || request.note || '—')}</Typography.Text>
             },
-            { title: 'Trạng thái', dataIndex: 'status', render: (status: RequestStatus) => <StatusTag status={status} /> },
-            { title: 'Hành động', align: 'right', render: (_, request) => actionButtons(request) }
+            { title: 'Trạng thái', width: 150, dataIndex: 'status', render: (status: RequestStatus) => <StatusTag status={status} /> },
+            { title: 'Hành động', width: 160, align: 'right', render: (_, request) => actionButtons(request) }
           ]}
             />
           </Card>
         </Col>
-        <Col xs={24} xl={8} style={{ display: isMobile ? 'none' : undefined }}>
+        <Col xs={24} xl={9} style={{ display: isMobile ? 'none' : undefined, minWidth: 0 }}>
           <div ref={detailPanelRef} tabIndex={-1} style={{ outline: 'none' }}>
             <Card
               variant="borderless"

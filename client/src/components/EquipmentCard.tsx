@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Button, Card } from 'antd';
 import type { Device } from '@/types';
 
@@ -16,9 +17,15 @@ const TIER_COLORS: Record<string, { bg: string; color: string }> = {
 export default function EquipmentCard({ device, onBorrow }: EquipmentCardProps) {
   const tierConfig = TIER_COLORS[device.tier || 'C'];
   const isOutOfStock = device.availableQuantity === 0;
+  const [imageFailed, setImageFailed] = useState(false);
+  const showImage = Boolean(device.image) && !imageFailed;
   const outOfStockStyle = isOutOfStock
     ? { opacity: 0.65 }
     : undefined;
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [device.image]);
 
   return (
     <Card
@@ -32,19 +39,29 @@ export default function EquipmentCard({ device, onBorrow }: EquipmentCardProps) 
       }}
       styles={{ body: { padding: 0 } }}
       onClick={() => !isOutOfStock && onBorrow?.(device)}
-    >
-      {/* Top section: icon + tier badge */}
-      <div
-        style={{
-          height: 140,
-          background: '#EFE9DD',
-          display: 'grid',
-          placeItems: 'center',
-          fontSize: 48,
-          position: 'relative'
-        }}
       >
-        {device.icon || '📦'}
+        {/* Top section: icon + tier badge */}
+        <div
+          style={{
+            height: 140,
+            background: '#EFE9DD',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: 48,
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+        {showImage ? (
+          <img
+            src={device.image}
+            alt={device.name}
+            onError={() => setImageFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          device.icon || '📦'
+        )}
 
         {/* Tier badge */}
         <div

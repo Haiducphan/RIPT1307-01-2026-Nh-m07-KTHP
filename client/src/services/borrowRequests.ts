@@ -1,4 +1,5 @@
 import { apiGet, apiPatch, apiPost } from './http';
+import { normalizeBorrowStatus } from '@/constants/borrowStatus';
 import type { BorrowRequest } from '@/types';
 
 export interface CreateBorrowRequestPayload {
@@ -51,6 +52,9 @@ interface RawBorrowRequest {
 
 interface BorrowRequestsResponse {
   data?: RawBorrowRequest[];
+  totalItems?: number;
+  total?: number;
+  count?: number;
 }
 
 export interface NormalizedBorrowRequest extends BorrowRequest {
@@ -98,16 +102,59 @@ function normalizeBorrowRequest(raw: RawBorrowRequest): NormalizedBorrowRequest 
     purpose,
     note: purpose,
     eventName: raw.eventName ?? raw.event_name ?? '',
-    status: (raw.status || 'pending') as BorrowRequest['status'],
+    status: normalizeBorrowStatus(raw.status),
     createdAt: raw.createdAt ?? raw.created_at
   };
 }
 
-export function getBorrowRequests() {
-  return apiGet<RawBorrowRequest[] | BorrowRequestsResponse>('/borrow-requests').then((response) => {
+function buildBorrowRequestQuery(params?: { page?: number; limit?: number; status?: string }) {
+  if (!params) return '';
+
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', String(params.page));
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.status) query.set('status', params.status);
+
+  const value = query.toString();
+  return value ? `?${value}` : '';
+}
+
+export function getBorrowRequests(params?: { page?: number; limit?: number; status?: string }) {
+  return apiGet<RawBorrowRequest[] | BorrowRequestsResponse>(`/borrow-requests${buildBorrowRequestQuery(params)}`).then((response) => {
     const requests = Array.isArray(response) ? response : response.data ?? [];
     return requests.map(normalizeBorrowRequest);
   });
+}
+
+export async function getReturnableBorrowRequests() {
+  const [borrowingRequests, overdueRequests] = await Promise.all([
+    getBorrowRequests({ status: 'borrowing', page: 1, limit: 1000 }),
+    getBorrowRequests({ status: 'overdue', page: 1, limit: 1000 })
+  ]);
+  const requestMap = new Map<string, NormalizedBorrowRequest>();
+
+  [...borrowingRequests, ...overdueRequests].forEach((request) => {
+    requestMap.set(request.id, request);
+  });
+
+  return Array.from(requestMap.values());
+}
+
+function getBorrowRequestCount(params?: { status?: string }) {
+  return apiGet<BorrowRequestsResponse>(`/borrow-requests${buildBorrowRequestQuery({ ...params, page: 1, limit: 1 })}`).then((response) => {
+    const fallbackCount = Array.isArray(response.data) ? response.data.length : 0;
+    return Number(response.totalItems ?? response.total ?? response.count ?? fallbackCount);
+  });
+}
+
+export async function getBorrowRequestStatusCounts() {
+  const [pendingCount, borrowingCount, overdueCount] = await Promise.all([
+    getBorrowRequestCount({ status: 'pending' }),
+    getBorrowRequestCount({ status: 'borrowing' }),
+    getBorrowRequestCount({ status: 'overdue' })
+  ]);
+
+  return { pendingCount, borrowingCount, overdueCount };
 }
 
 export function getMyBorrowRequests() {

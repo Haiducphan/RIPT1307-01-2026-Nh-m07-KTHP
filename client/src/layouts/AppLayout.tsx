@@ -2,19 +2,27 @@ import { useEffect, useState } from 'react';
 import {
   AppstoreOutlined,
   BarChartOutlined,
+  BellOutlined,
   CheckSquareOutlined,
   ClockCircleOutlined,
   DatabaseOutlined,
+  FolderOpenOutlined,
+  HomeOutlined,
   LogoutOutlined,
+  LoadingOutlined,
   MenuOutlined,
+  SafetyCertificateOutlined,
   SendOutlined,
+  TeamOutlined,
+  WarningOutlined,
   UserOutlined
 } from '@ant-design/icons';
-import { Avatar, Button, Drawer, Layout, Menu, Space, Typography } from 'antd';
+import { Avatar, Button, Drawer, Layout, Menu, message, Space, Tooltip, Typography, Upload } from 'antd';
 import type { MenuProps } from 'antd';
 import { history, Outlet, useLocation } from 'umi';
 import { ROUTES } from '@/constants/routes';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { getMe, normalizeUploadUrl, uploadCurrentUserAvatar, uploadMyAvatar } from '@/services/auth';
 import { useAuthStore } from '@/stores/authStore';
 
 const { Header, Content, Sider } = Layout;
@@ -42,18 +50,28 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    if (response?.data?.message) return response.data.message;
+  }
+
+  return fallback;
+}
+
 export default function AppLayout() {
   const location = useLocation();
-  const { currentUser, signOut } = useAuthStore();
+  const { currentUser, signIn, signOut } = useAuthStore();
   const isAdmin = currentUser?.role === 'admin';
   const displayName = getDisplayName(currentUser?.fullName, currentUser?.name);
-  const avatarUrl = currentUser?.avatarUrl || currentUser?.avatar;
+  const avatarUrl = normalizeUploadUrl(currentUser?.avatarUrl || currentUser?.avatar);
   const trustScore = typeof currentUser?.trustScore === 'number' ? currentUser.trustScore : 0;
   const trustRank = currentUser?.trustRank ? RANK_LABEL[currentUser.trustRank] ?? currentUser.trustRank : 'Đá';
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     const handler = () => {
@@ -72,17 +90,61 @@ export default function AppLayout() {
     history.push(ROUTES.login);
   };
 
+  const handleAvatarUpload = async (file: File) => {
+    if (!currentUser) return false;
+
+    if (!file.type?.startsWith('image/')) {
+      message.error('Vui lòng chọn file ảnh.', 3);
+      return false;
+    }
+
+    setAvatarUploading(true);
+    try {
+      const response = isAdmin ? await uploadCurrentUserAvatar(file) : await uploadMyAvatar(file);
+      let latestUser = currentUser;
+      try {
+        latestUser = await getMe();
+      } catch {
+        latestUser = currentUser;
+      }
+      const nextAvatarUrl = normalizeUploadUrl(response.avatarUrl ?? latestUser.avatarUrl ?? latestUser.avatar);
+
+      signIn({
+        ...currentUser,
+        ...latestUser,
+        token: currentUser.token,
+        avatarUrl: nextAvatarUrl,
+        avatar: nextAvatarUrl
+      });
+
+      message.success('Đã cập nhật ảnh đại diện.', 2);
+    } catch (error) {
+      message.error(getErrorMessage(error, 'Không thể cập nhật ảnh đại diện. Vui lòng thử lại.'), 3);
+    } finally {
+      setAvatarUploading(false);
+    }
+
+    return false;
+  };
+
   const studentItems: MenuProps['items'] = [
-    { key: ROUTES.studentDevices, icon: <AppstoreOutlined />, label: 'Danh sách thiết bị' },
+    { key: ROUTES.studentDevices, icon: <AppstoreOutlined />, label: 'Trang chủ' },
     { key: ROUTES.studentBorrow, icon: <SendOutlined />, label: 'Gửi yêu cầu mượn' },
-    { key: ROUTES.studentRequests, icon: <ClockCircleOutlined />, label: 'Lịch sử mượn' }
+    { key: ROUTES.studentNotifications, icon: <BellOutlined />, label: 'Thông báo' },
+    { key: ROUTES.studentRequests, icon: <ClockCircleOutlined />, label: 'Lịch sử mượn' },
+    { key: ROUTES.studentTrustRules, icon: <SafetyCertificateOutlined />, label: 'Quy tắc điểm uy tín' }
   ];
 
   const adminItems: MenuProps['items'] = [
+    { key: ROUTES.adminDashboard, icon: <HomeOutlined />, label: 'Trang chủ' },
     { key: ROUTES.adminRequests, icon: <CheckSquareOutlined />, label: 'Yêu cầu mượn' },
     { key: ROUTES.adminDevices, icon: <DatabaseOutlined />, label: 'Quản lý kho' },
+    { key: ROUTES.adminCategories, icon: <FolderOpenOutlined />, label: 'Danh mục thiết bị' },
+    { key: ROUTES.adminStudents, icon: <TeamOutlined />, label: 'Tài khoản sinh viên' },
     { key: ROUTES.adminReturns, icon: <ClockCircleOutlined />, label: 'Ghi nhận trả' },
-    { key: ROUTES.adminStatistics, icon: <BarChartOutlined />, label: 'Thống kê' }
+    { key: ROUTES.adminStatistics, icon: <BarChartOutlined />, label: 'Thống kê' },
+    { key: ROUTES.adminAlerts, icon: <WarningOutlined />, label: 'Cảnh báo' },
+    { key: ROUTES.adminTrustRules, icon: <SafetyCertificateOutlined />, label: 'Quy tắc điểm uy tín' }
   ];
 
   const menuItems = isAdmin ? adminItems : studentItems;
@@ -142,9 +204,17 @@ export default function AppLayout() {
           )}
           <Space style={{ marginLeft: 'auto', minWidth: 0 }} size={isMobile ? 8 : 12} align="center">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <Avatar src={avatarUrl} icon={!avatarUrl ? <UserOutlined /> : undefined} style={{ flex: '0 0 auto', background: '#2D4A3E', color: '#F5EBD0' }}>
-                {!avatarUrl ? getInitials(displayName) : null}
-              </Avatar>
+              <Tooltip title="Đổi ảnh đại diện">
+                <Upload showUploadList={false} accept="image/*" beforeUpload={(file) => handleAvatarUpload(file)} disabled={avatarUploading}>
+                  <Avatar
+                    src={avatarUploading ? undefined : avatarUrl}
+                    icon={avatarUploading ? <LoadingOutlined /> : !avatarUrl ? <UserOutlined /> : undefined}
+                    style={{ flex: '0 0 auto', background: '#2D4A3E', color: '#F5EBD0', cursor: 'pointer', opacity: avatarUploading ? 0.78 : 1 }}
+                  >
+                    {!avatarUploading && !avatarUrl ? getInitials(displayName) : null}
+                  </Avatar>
+                </Upload>
+              </Tooltip>
               <div style={{ display: isMobile ? 'none' : 'grid', minWidth: 0, lineHeight: 1.25 }}>
                 <Typography.Text ellipsis style={{ maxWidth: 240, fontWeight: 700, color: '#1A1F1B' }}>
                   {displayName}
@@ -154,6 +224,9 @@ export default function AppLayout() {
                     Hạng {trustRank} · {trustScore} điểm uy tín
                   </Typography.Text>
                 )}
+                <Typography.Text style={{ color: '#8A8E88', fontSize: 11 }}>
+                  {avatarUploading ? 'Đang tải ảnh...' : 'Bấm avatar để đổi ảnh'}
+                </Typography.Text>
               </div>
             </div>
             <Button icon={<LogoutOutlined />} onClick={handleSignOut}>

@@ -63,12 +63,36 @@ export function apiPost<T>(url: string, data?: unknown) {
   return http.post<T>(url, data).then((response) => response.data);
 }
 
+export function apiPostForm<T>(url: string, data: FormData) {
+  return http
+    .post<T>(url, data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    .then((response) => response.data);
+}
+
 export function apiPatch<T>(url: string, data?: unknown) {
   return http.patch<T>(url, data).then((response) => response.data);
 }
 
+export function apiPatchForm<T>(url: string, data: FormData) {
+  return http
+    .patch<T>(url, data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    .then((response) => response.data);
+}
+
 export function apiPut<T>(url: string, data?: unknown) {
   return http.put<T>(url, data).then((response) => response.data);
+}
+
+export function apiPutForm<T>(url: string, data: FormData) {
+  return http
+    .put<T>(url, data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    .then((response) => response.data);
 }
 
 export function apiDelete<T>(url: string) {

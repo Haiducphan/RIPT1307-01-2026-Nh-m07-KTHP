@@ -21,30 +21,31 @@ import {
   Typography
 } from 'antd';
 import type { MenuProps } from 'antd';
+import dayjs from 'dayjs';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import {
+  getStudentStats,
+  getStudentTrustScoreLogs,
+  getStudents,
+  restoreStudentTrustScore,
+  toggleStudentLock
+} from '@/services/students';
+import type { StudentRank, StudentRecord, TrustScoreLogRecord } from '@/services/students';
 
-type StudentRank = 'diamond' | 'gold' | 'silver' | 'bronze' | 'stone';
 type StudentStatus = 'active' | 'locked' | 'warning';
-
-interface Student {
-  id: string;
-  fullName: string;
-  mssv: string;
-  email: string;
-  className: string;
-  club: string;
-  rank: StudentRank;
-  score: number;
-  borrowing: number;
-  totalBorrow: number;
-  onTime: number;
-  late: number;
-  status: StudentStatus;
-  phone: string;
-  joinedAt: string;
-}
 
 interface RestoreFormValues {
   points: number;
+  reason: string;
+}
+
+interface PermanentLockFormValues {
+  deduction?: number;
+  reason: string;
+}
+
+interface UnlockFormValues {
+  trustScore: number;
   reason: string;
 }
 
@@ -53,7 +54,7 @@ const RANK_CONFIG: Record<StudentRank, { label: string; color: string; bg: strin
   gold: { label: 'Vàng', color: '#8B6A1F', bg: '#F5EBD0' },
   silver: { label: 'Bạc', color: '#4A5568', bg: '#ECEEF2' },
   bronze: { label: 'Đồng', color: '#8C4A36', bg: '#F7E8DF' },
-  stone: { label: 'Đá cuội', color: '#3F403D', bg: '#EFE9DD' }
+  pebble: { label: 'Đá cuội', color: '#3F403D', bg: '#EFE9DD' }
 };
 
 const STATUS_CONFIG: Record<StudentStatus, { label: string; color: string }> = {
@@ -62,17 +63,19 @@ const STATUS_CONFIG: Record<StudentStatus, { label: string; color: string }> = {
   warning: { label: 'Có cảnh báo', color: 'gold' }
 };
 
-const mockStudents: Student[] = [
-  { id: 'u1', fullName: 'Nguyễn Văn A', mssv: '22000123', email: 'a@uet.edu.vn', className: 'CNTT K22', club: 'Truyền thông', rank: 'gold', score: 85, borrowing: 1, totalBorrow: 14, onTime: 12, late: 1, status: 'active', phone: '0987 654 321', joinedAt: '09/2024' },
-  { id: 'u2', fullName: 'Trần Thị B', mssv: '22000124', email: 'b@uet.edu.vn', className: 'CNTT K22', club: 'Truyền thông', rank: 'silver', score: 65, borrowing: 0, totalBorrow: 8, onTime: 6, late: 2, status: 'active', phone: '0912 333 444', joinedAt: '10/2024' },
-  { id: 'u3', fullName: 'Lê Văn C', mssv: '21000099', email: 'c@uet.edu.vn', className: 'KHMT K21', club: 'Học thuật', rank: 'diamond', score: 98, borrowing: 2, totalBorrow: 25, onTime: 24, late: 0, status: 'active', phone: '0901 222 333', joinedAt: '08/2023' },
-  { id: 'u4', fullName: 'Phạm Tùng', mssv: '22000222', email: 'tung@uet.edu.vn', className: 'Marketing K23', club: 'Sự kiện', rank: 'bronze', score: 55, borrowing: 1, totalBorrow: 9, onTime: 6, late: 3, status: 'warning', phone: '0988 111 222', joinedAt: '11/2024' },
-  { id: 'u5', fullName: 'Hoàng Lan', mssv: '22000333', email: 'lan@uet.edu.vn', className: 'Truyền thông K22', club: 'Truyền thông', rank: 'diamond', score: 95, borrowing: 0, totalBorrow: 18, onTime: 18, late: 0, status: 'active', phone: '0977 222 111', joinedAt: '09/2024' },
-  { id: 'u6', fullName: 'Vũ Khánh', mssv: '22000999', email: 'khanh@uet.edu.vn', className: 'CNTT K23', club: 'Âm nhạc', rank: 'stone', score: 35, borrowing: 0, totalBorrow: 6, onTime: 2, late: 4, status: 'locked', phone: '0966 333 555', joinedAt: '01/2025' },
-  { id: 'u7', fullName: 'Đỗ Minh Anh', mssv: '23000444', email: 'anh@uet.edu.vn', className: 'CNTT K23', club: 'Media', rank: 'gold', score: 82, borrowing: 2, totalBorrow: 11, onTime: 10, late: 0, status: 'active', phone: '0934 555 666', joinedAt: '02/2025' },
-  { id: 'u8', fullName: 'Bùi Hà My', mssv: '23000555', email: 'my@uet.edu.vn', className: 'KHMT K23', club: 'Học thuật', rank: 'silver', score: 72, borrowing: 1, totalBorrow: 7, onTime: 7, late: 0, status: 'active', phone: '0923 777 888', joinedAt: '03/2025' },
-  { id: 'u9', fullName: 'Trần Đức Nam', mssv: '21000678', email: 'nam@uet.edu.vn', className: 'ATTT K21', club: 'Thể thao', rank: 'bronze', score: 58, borrowing: 0, totalBorrow: 5, onTime: 4, late: 1, status: 'warning', phone: '0911 888 999', joinedAt: '07/2023' }
-];
+const TRUST_REASON_LABEL: Record<string, string> = {
+  initial: 'Khởi tạo điểm',
+  return_ontime: 'Trả đúng hạn',
+  streak_3: 'Thưởng chuỗi 3 lần trả tốt',
+  streak_5: 'Thưởng chuỗi 5 lần trả tốt',
+  admin_manual_add: 'Admin cộng điểm thủ công',
+  admin_manual_deduct: 'Admin trừ điểm thủ công',
+  cancel_approved: 'Huỷ đơn sau khi đã duyệt',
+  noshow: 'Không đến nhận thiết bị',
+  late_return: 'Quá hạn trả thiết bị',
+  minor_damage: 'Thiết bị hư hỏng nhẹ',
+  major_damage: 'Thiết bị hư hỏng nặng hoặc mất'
+};
 
 function normalizeText(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
@@ -82,61 +85,161 @@ function getInitials(name: string) {
   return name.split(/\s+/).map((part) => part[0]).slice(-2).join('').toUpperCase();
 }
 
+function getStudentStatus(student: StudentRecord): StudentStatus {
+  if (student.borrowLocked || student.isPermanentlyLocked) return 'locked';
+  if (student.totalLate > 0) return 'warning';
+  return 'active';
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return 'Chưa có dữ liệu';
+  const date = dayjs(value);
+  return date.isValid() ? date.format('DD/MM/YYYY HH:mm') : value;
+}
+
 function RankTag({ rank }: { rank: StudentRank }) {
   const config = RANK_CONFIG[rank];
   return <Tag style={{ border: 'none', borderRadius: 999, color: config.color, background: config.bg, fontWeight: 700 }}>{config.label}</Tag>;
 }
 
+function StatusTag({ status }: { status: StudentStatus }) {
+  const config = STATUS_CONFIG[status];
+  return <Tag color={config.color}>{config.label}</Tag>;
+}
+
+function MutedValue({ children }: { children: string }) {
+  return <span style={{ color: '#9A9D98' }}>{children}</span>;
+}
+
 function StatCard({ title, value, meta, danger }: { title: string; value: number; meta: string; danger?: boolean }) {
   return (
     <Card variant="borderless" style={{ borderRadius: 14, border: danger ? '1px solid #B05A4D' : '1px solid #E5DECB' }} styles={{ body: { padding: 20 } }}>
-      <div style={{ color: '#6B6F6C', fontSize: 11, letterSpacing: '0.08em' }}>{title}</div>
+      <div style={{ color: '#6B6F6C', fontSize: 11, letterSpacing: 0 }}>{title}</div>
       <div style={{ fontFamily: 'Georgia, serif', fontSize: 34, color: danger ? '#B05A4D' : '#1A1F1B', marginTop: 8 }}>{value}</div>
       <div style={{ color: '#6B6F6C', fontSize: 12 }}>{meta}</div>
     </Card>
   );
 }
 
+function EmptyStudentState({ hasFilters, onClearFilters }: { hasFilters: boolean; onClearFilters: () => void }) {
+  return (
+    <Empty
+      description={
+        <div>
+          <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>
+            {hasFilters ? 'Không tìm thấy sinh viên nào' : 'Chưa có dữ liệu sinh viên từ hệ thống'}
+          </h3>
+          <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+            {hasFilters ? 'Thử thay đổi từ khoá hoặc bộ lọc khác.' : 'Danh sách sẽ hiển thị khi hệ thống có dữ liệu sinh viên.'}
+          </p>
+        </div>
+      }
+      style={{ padding: '60px 0' }}
+    >
+      {hasFilters && <Button onClick={onClearFilters}>Xoá bộ lọc</Button>}
+    </Empty>
+  );
+}
+
 export default function AdminStudentsPage() {
   const [restoreForm] = Form.useForm<RestoreFormValues>();
-  const [students, setStudents] = useState(mockStudents);
-  const [loading, setLoading] = useState(true);
+  const [permanentLockForm] = Form.useForm<PermanentLockFormValues>();
+  const [unlockForm] = Form.useForm<UnlockFormValues>();
+  const { data: studentList, loading, refresh } = useAsyncData(() => getStudents({ page: 1, limit: 1000 }), []);
+  const { data: studentStats } = useAsyncData(getStudentStats, []);
   const [searchText, setSearchText] = useState('');
   const [rankFilter, setRankFilter] = useState<StudentRank | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<StudentStatus | 'all'>('all');
-  const [detailStudent, setDetailStudent] = useState<Student>();
-  const [restoreStudent, setRestoreStudent] = useState<Student>();
+  const [detailStudent, setDetailStudent] = useState<StudentRecord>();
+  const [restoreStudent, setRestoreStudent] = useState<StudentRecord>();
+  const [permanentLockStudent, setPermanentLockStudent] = useState<StudentRecord>();
+  const [unlockStudent, setUnlockStudent] = useState<StudentRecord>();
+  const [scoreLogs, setScoreLogs] = useState<TrustScoreLogRecord[]>([]);
+  const [scoreLogsLoading, setScoreLogsLoading] = useState(false);
+  const [actionSaving, setActionSaving] = useState(false);
+  const students = studentList?.students ?? [];
+
+  const loadTrustScoreLogs = async (studentId: string) => {
+    setScoreLogsLoading(true);
+    try {
+      setScoreLogs(await getStudentTrustScoreLogs(studentId));
+    } catch {
+      setScoreLogs([]);
+      message.error('Không thể tải lịch sử điểm uy tín', 3);
+    } finally {
+      setScoreLogsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setLoading(false), 700);
-    return () => window.clearTimeout(timer);
-  }, []);
+    if (!detailStudent?.id) {
+      setScoreLogs([]);
+      return;
+    }
+
+    void loadTrustScoreLogs(detailStudent.id);
+  }, [detailStudent?.id]);
 
   const filteredStudents = useMemo(() => {
     const keyword = normalizeText(searchText.trim());
     return students.filter((student) => {
-      const matchesSearch = !keyword || normalizeText(`${student.fullName} ${student.mssv} ${student.email}`).includes(keyword);
-      const matchesRank = rankFilter === 'all' || student.rank === rankFilter;
-      const matchesStatus = statusFilter === 'all' || student.status === statusFilter;
+      const status = getStudentStatus(student);
+      const matchesSearch = !keyword || normalizeText(`${student.fullName} ${student.studentCode} ${student.email ?? ''}`).includes(keyword);
+      const matchesRank = rankFilter === 'all' || student.trustRank === rankFilter;
+      const matchesStatus = statusFilter === 'all' || status === statusFilter;
       return matchesSearch && matchesRank && matchesStatus;
     });
   }, [rankFilter, searchText, statusFilter, students]);
 
-  const handleRestore = (values: RestoreFormValues) => {
-    if (!restoreStudent) return;
-    // TODO: Kết nối API khi BE2 ready
-    setStudents((current) =>
-      current.map((student) => student.id === restoreStudent.id ? { ...student, score: Math.min(100, student.score + values.points) } : student)
-    );
-    setRestoreStudent(undefined);
-    restoreForm.resetFields();
-    message.success('Đã phục hồi điểm');
+  const stats = useMemo(() => {
+    const totalStudents = studentList?.totalItems ?? studentStats?.totalStudents ?? students.length;
+    const currentlyBorrowing = studentStats?.currentlyBorrowing ?? 0;
+    const lateStudents = students.filter((student) => student.totalLate > 0).length;
+    const trustedStudents = students.filter((student) => student.trustRank === 'diamond' || student.trustRank === 'gold').length;
+
+    return { totalStudents, currentlyBorrowing, lateStudents, trustedStudents };
+  }, [studentList?.totalItems, studentStats?.currentlyBorrowing, studentStats?.totalStudents, students]);
+
+  const hasFilters = Boolean(searchText.trim()) || rankFilter !== 'all' || statusFilter !== 'all';
+
+  const clearFilters = () => {
+    setSearchText('');
+    setRankFilter('all');
+    setStatusFilter('all');
   };
 
-  const handleLock = (student: Student) => {
+  const syncSelectedStudent = (nextStudents: StudentRecord[], targetId: string) => {
+    const nextStudent = nextStudents.find((student) => student.id === targetId);
+    if (nextStudent) setDetailStudent(nextStudent);
+  };
+
+  const refreshStudents = async (targetId?: string) => {
+    const nextList = await refresh();
+    if (targetId && nextList?.students) syncSelectedStudent(nextList.students, targetId);
+  };
+
+  const handleRestore = async (values: RestoreFormValues) => {
+    if (!restoreStudent) return;
+
+    try {
+      const response = await restoreStudentTrustScore(restoreStudent.id, {
+        pointsToAdd: values.points,
+        reason: values.reason
+      });
+      setRestoreStudent(undefined);
+      restoreForm.resetFields();
+      await refreshStudents(restoreStudent.id);
+      await loadTrustScoreLogs(restoreStudent.id);
+      message.success(response.message || 'Đã cập nhật điểm uy tín');
+    } catch {
+      message.error('Không thể cập nhật điểm uy tín', 3);
+    }
+  };
+
+  const handleLock = (student: StudentRecord) => {
     let days = 7;
     Modal.confirm({
-      title: `Khoá tài khoản ${student.fullName}`,
+      title: `Khoá tính năng mượn đồ của ${student.fullName}`,
       content: (
         <div>
           <p>Sinh viên sẽ không thể mượn đồ trong thời gian bị khoá.</p>
@@ -146,61 +249,145 @@ export default function AdminStudentsPage() {
       okText: 'Đồng ý',
       cancelText: 'Huỷ',
       okButtonProps: { danger: true },
-      onOk: () => {
-        // TODO: Kết nối API khi BE2 ready
-        setStudents((current) => current.map((item) => item.id === student.id ? { ...item, status: 'locked' } : item));
-        message.success(`Đã khoá tài khoản ${days} ngày`);
+      onOk: async () => {
+        try {
+          const response = await toggleStudentLock(student.id, {
+            isLocked: true,
+            lockDays: days,
+            reason: `Admin khoá thủ công ${days} ngày`
+          });
+          await refreshStudents(student.id);
+          message.success(response.message || `Đã khoá tính năng mượn đồ ${days} ngày`);
+        } catch {
+          message.error('Không thể khoá tính năng mượn đồ', 3);
+        }
       }
     });
   };
 
-  const studentMenu = (student: Student): MenuProps['items'] => [
-    { key: 'lock', label: 'Khoá tài khoản', danger: true, onClick: () => handleLock(student) },
-    { key: 'restore', label: 'Phục hồi điểm', onClick: () => setRestoreStudent(student) }
-  ];
+  const handleUnlock = (student: StudentRecord) => {
+    setUnlockStudent(student);
+    unlockForm.setFieldsValue({
+      trustScore: student.trustScore,
+      reason: ''
+    });
+  };
 
-  const borrowHistory = [
-    { id: '0138', device: 'Loa kéo JBL', date: '05/05 → 11/05', status: 'Đang mượn' },
-    { id: '0131', device: 'Máy chiếu Epson', date: '22/04 → 25/04', status: 'Đã trả' },
-    { id: '0119', device: 'Tripod Manfrotto', date: '01/04 → 04/04', status: 'Trễ hạn' }
-  ];
-  const scoreHistory = [
-    { id: '1', time: '09/05 14:32', action: '🎉 Chuỗi tốt đạt mốc 5', points: '+7', balance: 85 },
-    { id: '2', time: '25/04 16:10', action: '✓ Trả đúng hạn', points: '+2', balance: 78 },
-    { id: '3', time: '04/04 09:00', action: '⚠ Trả trễ 2 ngày', points: '-6', balance: 76 }
-  ];
+  const handlePermanentLock = (student: StudentRecord) => {
+    setPermanentLockStudent(student);
+    permanentLockForm.setFieldsValue({
+      deduction: undefined,
+      reason: ''
+    });
+  };
+
+  const handlePermanentLockSubmit = async (values: PermanentLockFormValues) => {
+    if (!permanentLockStudent) return;
+
+    setActionSaving(true);
+    try {
+      const deduction = Number(values.deduction || 0);
+      if (deduction > 0) {
+        await restoreStudentTrustScore(permanentLockStudent.id, {
+          pointsToAdd: -deduction,
+          reason: values.reason
+        });
+      }
+
+      const response = await toggleStudentLock(permanentLockStudent.id, {
+        isLocked: true,
+        isPermanent: true,
+        reason: values.reason
+      });
+      await refreshStudents(permanentLockStudent.id);
+      await loadTrustScoreLogs(permanentLockStudent.id);
+      message.success(response.message || 'Đã khoá tài khoản vĩnh viễn');
+      setPermanentLockStudent(undefined);
+      permanentLockForm.resetFields();
+    } catch {
+      message.error('Không thể khoá tài khoản vĩnh viễn', 3);
+    } finally {
+      setActionSaving(false);
+    }
+  };
+
+  const handleUnlockSubmit = async (values: UnlockFormValues) => {
+    if (!unlockStudent) return;
+
+    setActionSaving(true);
+    try {
+      const nextScore = Number(values.trustScore);
+      const scoreDelta = nextScore - unlockStudent.trustScore;
+      if (scoreDelta !== 0) {
+        await restoreStudentTrustScore(unlockStudent.id, {
+          pointsToAdd: scoreDelta,
+          reason: values.reason
+        });
+      }
+
+      const response = await toggleStudentLock(unlockStudent.id, {
+        isLocked: false,
+        reason: values.reason
+      });
+      await refreshStudents(unlockStudent.id);
+      await loadTrustScoreLogs(unlockStudent.id);
+      message.success(response.message || 'Đã mở khoá tài khoản');
+      setUnlockStudent(undefined);
+      unlockForm.resetFields();
+    } catch {
+      message.error('Không thể mở khoá tài khoản', 3);
+    } finally {
+      setActionSaving(false);
+    }
+  };
+
+  const studentMenu = (student: StudentRecord): MenuProps['items'] => {
+    const status = getStudentStatus(student);
+
+    return [
+      status === 'locked'
+        ? { key: 'unlock', label: 'Mở khoá và cập nhật điểm', onClick: () => handleUnlock(student) }
+        : { key: 'lock', label: 'Khoá mượn đồ', danger: true, onClick: () => handleLock(student) },
+      !student.isPermanentlyLocked
+        ? { key: 'permanent-lock', label: 'Khoá tài khoản vĩnh viễn', danger: true, onClick: () => handlePermanentLock(student) }
+        : null,
+      { key: 'restore', label: 'Phục hồi điểm', onClick: () => setRestoreStudent(student) }
+    ].filter(Boolean) as MenuProps['items'];
+  };
 
   return (
     <div style={{ paddingBottom: 48 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 34, fontWeight: 500, margin: '0 0 8px', color: '#1A1F1B' }}>Quản lý sinh viên</h1>
-          <p style={{ color: '#6B6F6C', margin: 0 }}>Theo dõi điểm uy tín và lịch sử vi phạm</p>
+          <p style={{ color: '#6B6F6C', margin: 0 }}>Theo dõi điểm uy tín và lịch sử vi phạm từ dữ liệu hệ thống</p>
         </div>
-        <Button>Xuất Excel</Button>
+        <Tooltip title="Chức năng chưa khả dụng">
+          <Button disabled>Xuất Excel</Button>
+        </Tooltip>
       </div>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-        <Col xs={24} sm={12} xl={6}><StatCard title="TỔNG SINH VIÊN" value={124} meta="đã đăng ký" /></Col>
-        <Col xs={24} sm={12} xl={6}><StatCard title="ĐANG MƯỢN" value={18} meta="có đơn hoạt động" /></Col>
-        <Col xs={24} sm={12} xl={6}><StatCard title="QUÁ HẠN" value={3} meta="cần nhắc nhở" danger /></Col>
-        <Col xs={24} sm={12} xl={6}><StatCard title="HẠNG VÀNG TRỞ LÊN" value={45} meta="uy tín cao" /></Col>
+        <Col xs={24} sm={12} xl={6}><StatCard title="Tổng sinh viên" value={stats.totalStudents} meta="tài khoản đã đăng ký" /></Col>
+        <Col xs={24} sm={12} xl={6}><StatCard title="Đang mượn" value={stats.currentlyBorrowing} meta="đang mượn thiết bị" /></Col>
+        <Col xs={24} sm={12} xl={6}><StatCard title="Từng trễ hạn" value={stats.lateStudents} meta="theo hồ sơ sinh viên" danger={stats.lateStudents > 0} /></Col>
+        <Col xs={24} sm={12} xl={6}><StatCard title="Hạng vàng trở lên" value={stats.trustedStudents} meta="hạng uy tín cao" /></Col>
       </Row>
 
       <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-          <Input.Search allowClear placeholder="Tìm theo MSSV, tên, email..." value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: 320, maxWidth: '100%' }} />
+          <Input.Search allowClear placeholder="Tìm theo MSSV, tên, email..." value={searchText} onChange={(event) => setSearchText(event.target.value)} style={{ width: 320, maxWidth: '100%' }} />
           <Select
             value={rankFilter}
             onChange={setRankFilter}
             style={{ width: 170 }}
             options={[
-              { value: 'all', label: 'Tất cả' },
+              { value: 'all', label: 'Tất cả hạng' },
               { value: 'diamond', label: 'Kim cương' },
               { value: 'gold', label: 'Vàng' },
               { value: 'silver', label: 'Bạc' },
               { value: 'bronze', label: 'Đồng' },
-              { value: 'stone', label: 'Đá cuội' }
+              { value: 'pebble', label: 'Đá cuội' }
             ]}
           />
           <Select
@@ -208,7 +395,7 @@ export default function AdminStudentsPage() {
             onChange={setStatusFilter}
             style={{ width: 170 }}
             options={[
-              { value: 'all', label: 'Tất cả' },
+              { value: 'all', label: 'Tất cả trạng thái' },
               { value: 'active', label: 'Hoạt động' },
               { value: 'locked', label: 'Bị khoá' },
               { value: 'warning', label: 'Có cảnh báo' }
@@ -216,38 +403,14 @@ export default function AdminStudentsPage() {
           />
         </div>
 
-        <Table<Student>
+        <Table<StudentRecord>
           rowKey="id"
           loading={loading}
           dataSource={filteredStudents}
           pagination={{ pageSize: 8 }}
           scroll={{ x: 'max-content' }}
           locale={{
-            emptyText: (
-              <Empty
-                image={<div style={{ fontSize: 64 }}>🔍</div>}
-                styles={{ image: { height: 84, marginBottom: 14 } }}
-                description={
-                  <div>
-                    <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Không tìm thấy sinh viên nào</h3>
-                    <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
-                      Thử thay đổi từ khoá hoặc bộ lọc khác.
-                    </p>
-                  </div>
-                }
-                style={{ padding: '60px 0' }}
-              >
-                <Button
-                  onClick={() => {
-                    setSearchText('');
-                    setRankFilter('all');
-                    setStatusFilter('all');
-                  }}
-                >
-                  Xoá bộ lọc
-                </Button>
-              </Empty>
-            )
+            emptyText: <EmptyStudentState hasFilters={hasFilters && students.length > 0} onClearFilters={clearFilters} />
           }}
           columns={[
             {
@@ -255,28 +418,34 @@ export default function AdminStudentsPage() {
               render: (_, student) => (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Avatar style={{ background: '#2D4A3E', color: '#F5EBD0' }}>{getInitials(student.fullName)}</Avatar>
-                  <div><div style={{ fontWeight: 700 }}>{student.fullName}</div><div style={{ color: '#9A9D98', fontSize: 12 }}>{student.mssv}</div></div>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{student.fullName}</div>
+                    <div style={{ color: '#9A9D98', fontSize: 12 }}>{student.studentCode}</div>
+                  </div>
                 </div>
               )
             },
-            { title: 'Email', dataIndex: 'email' },
-            { title: 'CLB / Lớp', render: (_, student) => `${student.club} · ${student.className}` },
-            { title: 'Hạng', dataIndex: 'rank', render: (rank: StudentRank) => <RankTag rank={rank} /> },
+            { title: 'Email', render: (_, student) => student.email || <MutedValue>Chưa có dữ liệu</MutedValue> },
+            { title: 'Lớp', render: (_, student) => student.className || <MutedValue>Chưa có dữ liệu</MutedValue> },
+            { title: 'Hạng', dataIndex: 'trustRank', render: (rank: StudentRank) => <RankTag rank={rank} /> },
             {
               title: 'Điểm',
               render: (_, student) => (
                 <div style={{ minWidth: 100 }}>
-                  <Typography.Text strong>{student.score}</Typography.Text>
-                  <Progress percent={student.score} size="small" showInfo={false} strokeColor="#C99A3F" />
+                  <Typography.Text strong>{student.trustScore}</Typography.Text>
+                  <Progress percent={Math.min(100, Math.max(0, student.trustScore))} size="small" showInfo={false} strokeColor="#C99A3F" />
                 </div>
               )
             },
-            { title: 'Đang mượn', render: (_, student) => `${student.borrowing} đơn` },
+            {
+              title: 'Trạng thái tài khoản',
+              render: (_, student) => <StatusTag status={getStudentStatus(student)} />
+            },
             {
               title: 'Lịch sử',
               render: (_, student) => (
-                <Tooltip title={`${student.totalBorrow} mượn / ${student.onTime} đúng hạn / ${student.late} trễ`}>
-                  <Tag>{student.totalBorrow} lượt</Tag>
+                <Tooltip title={`${student.totalBorrowed} lượt mượn / ${student.totalLate} lượt trễ`}>
+                  <Tag>{student.totalBorrowed} lượt</Tag>
                 </Tooltip>
               )
             },
@@ -312,7 +481,7 @@ export default function AdminStudentsPage() {
               <Avatar size={72} style={{ background: '#2D4A3E', color: '#F5EBD0', fontWeight: 700 }}>{getInitials(detailStudent.fullName)}</Avatar>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 700 }}>{detailStudent.fullName}</div>
-                <div style={{ color: '#6B6F6C' }}>{detailStudent.mssv} · {detailStudent.email}</div>
+                <div style={{ color: '#6B6F6C' }}>{detailStudent.studentCode} · {detailStudent.email || 'Chưa có email'}</div>
               </div>
             </div>
             <Tabs
@@ -325,22 +494,23 @@ export default function AdminStudentsPage() {
                       <Col xs={24} md={10}>
                         <Card style={{ background: '#2D4A3E', color: '#fff', borderRadius: 14 }}>
                           <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>HẠNG HIỆN TẠI</div>
-                          <div style={{ fontFamily: 'Georgia, serif', fontSize: 28, color: '#F5EBD0', marginTop: 8 }}>★ {RANK_CONFIG[detailStudent.rank].label}</div>
-                          <div style={{ fontFamily: 'Georgia, serif', fontSize: 48 }}>{detailStudent.score}</div>
-                          <Progress percent={detailStudent.score} showInfo={false} strokeColor="#C99A3F" />
+                          <div style={{ fontFamily: 'Georgia, serif', fontSize: 28, color: '#F5EBD0', marginTop: 8 }}>★ {RANK_CONFIG[detailStudent.trustRank].label}</div>
+                          <div style={{ fontFamily: 'Georgia, serif', fontSize: 48 }}>{detailStudent.trustScore}</div>
+                          <Progress percent={Math.min(100, Math.max(0, detailStudent.trustScore))} showInfo={false} strokeColor="#C99A3F" />
                         </Card>
                       </Col>
                       <Col xs={24} md={14}>
                         <Row gutter={[12, 12]}>
-                          <Col span={8}><StatCard title="Tổng mượn" value={detailStudent.totalBorrow} meta="lượt" /></Col>
-                          <Col span={8}><StatCard title="Đúng hạn" value={detailStudent.onTime} meta="lượt" /></Col>
-                          <Col span={8}><StatCard title="Trễ" value={detailStudent.late} meta="lượt" danger={detailStudent.late > 0} /></Col>
+                          <Col span={8}><StatCard title="Tổng mượn" value={detailStudent.totalBorrowed} meta="lượt" /></Col>
+                          <Col span={8}><StatCard title="Chuỗi tốt" value={detailStudent.goodReturnStreak} meta="lần" /></Col>
+                          <Col span={8}><StatCard title="Trễ" value={detailStudent.totalLate} meta="lượt" danger={detailStudent.totalLate > 0} /></Col>
                         </Row>
                         <Card style={{ marginTop: 12 }}>
-                          <div>SĐT: {detailStudent.phone}</div>
-                          <div>Lớp: {detailStudent.className}</div>
-                          <div>CLB: {detailStudent.club}</div>
-                          <div>Ngày tham gia: {detailStudent.joinedAt}</div>
+                          <div>SĐT: {detailStudent.phone || <MutedValue>Chưa có dữ liệu</MutedValue>}</div>
+                          <div>Lớp: {detailStudent.className || <MutedValue>Chưa có dữ liệu</MutedValue>}</div>
+                          <div>Trạng thái mượn đồ: {STATUS_CONFIG[getStudentStatus(detailStudent)].label}</div>
+                          <div>Lý do khoá: {detailStudent.borrowLockReason || detailStudent.permanentLockReason || 'Không có'}</div>
+                          <div>Ngày tham gia: {formatDateTime(detailStudent.createdAt)}</div>
                         </Card>
                       </Col>
                     </Row>
@@ -349,22 +519,38 @@ export default function AdminStudentsPage() {
                 {
                   key: 'borrow',
                   label: 'Lịch sử mượn',
-                  children: <Table rowKey="id" pagination={false} dataSource={borrowHistory} scroll={{ x: 'max-content' }} columns={[
-                    { title: 'Đơn', dataIndex: 'id' },
-                    { title: 'Thiết bị', dataIndex: 'device' },
-                    { title: 'Ngày', dataIndex: 'date' },
-                    { title: 'Trạng thái', dataIndex: 'status' }
-                  ]} />
+                  children: (
+                    <Empty
+                      description={
+                        <div>
+                          <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Chưa có dữ liệu lịch sử mượn từ hệ thống</h3>
+                          <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>Lịch sử mượn chi tiết của sinh viên sẽ hiển thị khi hệ thống cung cấp dữ liệu.</p>
+                        </div>
+                      }
+                      style={{ padding: '44px 0' }}
+                    />
+                  )
                 },
                 {
                   key: 'score',
                   label: 'Lịch sử điểm',
-                  children: <Table rowKey="id" pagination={false} dataSource={scoreHistory} scroll={{ x: 'max-content' }} columns={[
-                    { title: 'Thời gian', dataIndex: 'time' },
-                    { title: 'Hành động', dataIndex: 'action' },
-                    { title: '+/-', dataIndex: 'points' },
-                    { title: 'Số dư', dataIndex: 'balance' }
-                  ]} />
+                  children: (
+                    <Table<TrustScoreLogRecord>
+                      rowKey="id"
+                      loading={scoreLogsLoading}
+                      pagination={false}
+                      dataSource={scoreLogs}
+                      scroll={{ x: 'max-content' }}
+                      locale={{ emptyText: <Empty description="Chưa có dữ liệu lịch sử điểm từ hệ thống" /> }}
+                      columns={[
+                        { title: 'Thời gian', render: (_, log) => formatDateTime(log.createdAt) },
+                        { title: 'Hành động', render: (_, log) => TRUST_REASON_LABEL[log.reason] ?? log.reason },
+                        { title: '+/-', render: (_, log) => <Typography.Text type={log.delta < 0 ? 'danger' : 'success'}>{log.delta > 0 ? `+${log.delta}` : log.delta}</Typography.Text> },
+                        { title: 'Số dư', render: (_, log) => log.scoreAfter },
+                        { title: 'Ghi chú', render: (_, log) => log.note || 'Không có' }
+                      ]}
+                    />
+                  )
                 }
               ]}
             />
@@ -382,11 +568,60 @@ export default function AdminStudentsPage() {
       >
         {restoreStudent && (
           <Form<RestoreFormValues> form={restoreForm} layout="vertical" onFinish={handleRestore}>
-            <p>Điểm hiện tại: <strong>{restoreStudent.score}</strong> / 100</p>
+            <p>Điểm hiện tại: <strong>{restoreStudent.trustScore}</strong> / 100</p>
             <Form.Item name="points" label="Số điểm muốn cộng" rules={[{ required: true, message: 'Nhập số điểm' }]}>
-              <InputNumber min={1} max={100 - restoreStudent.score} style={{ width: '100%' }} />
+              <InputNumber min={1} max={Math.max(1, 100 - restoreStudent.trustScore)} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item name="reason" label="Lý do phục hồi" rules={[{ required: true, whitespace: true, message: 'Nhập lý do phục hồi' }]}>
+              <Input.TextArea rows={3} />
+            </Form.Item>
+          </Form>
+        )}
+      </Modal>
+
+      <Modal
+        title={`Khoá tài khoản vĩnh viễn${permanentLockStudent ? `: ${permanentLockStudent.fullName}` : ''}`}
+        open={Boolean(permanentLockStudent)}
+        okText="Khoá vĩnh viễn"
+        cancelText="Huỷ"
+        confirmLoading={actionSaving}
+        okButtonProps={{ danger: true }}
+        onOk={() => permanentLockForm.submit()}
+        onCancel={() => setPermanentLockStudent(undefined)}
+      >
+        {permanentLockStudent && (
+          <Form<PermanentLockFormValues> form={permanentLockForm} layout="vertical" onFinish={handlePermanentLockSubmit}>
+            <p>
+              Điểm hiện tại: <strong>{permanentLockStudent.trustScore}</strong> / 100
+            </p>
+            <Form.Item name="deduction" label="Số điểm uy tín muốn trừ">
+              <InputNumber min={0} max={Math.max(0, permanentLockStudent.trustScore)} style={{ width: '100%' }} placeholder="Không trừ điểm nếu để trống" />
+            </Form.Item>
+            <Form.Item name="reason" label="Lý do khoá" rules={[{ required: true, whitespace: true, message: 'Nhập lý do khoá tài khoản' }]}>
+              <Input.TextArea rows={3} />
+            </Form.Item>
+          </Form>
+        )}
+      </Modal>
+
+      <Modal
+        title={`Mở khoá tài khoản${unlockStudent ? `: ${unlockStudent.fullName}` : ''}`}
+        open={Boolean(unlockStudent)}
+        okText="Mở khoá"
+        cancelText="Huỷ"
+        confirmLoading={actionSaving}
+        onOk={() => unlockForm.submit()}
+        onCancel={() => setUnlockStudent(undefined)}
+      >
+        {unlockStudent && (
+          <Form<UnlockFormValues> form={unlockForm} layout="vertical" onFinish={handleUnlockSubmit}>
+            <p>
+              Điểm hiện tại: <strong>{unlockStudent.trustScore}</strong> / 100
+            </p>
+            <Form.Item name="trustScore" label="Điểm uy tín sau khi mở khoá" rules={[{ required: true, message: 'Nhập điểm uy tín' }]}>
+              <InputNumber min={0} max={100} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="reason" label="Lý do mở khoá" rules={[{ required: true, whitespace: true, message: 'Nhập lý do mở khoá' }]}>
               <Input.TextArea rows={3} />
             </Form.Item>
           </Form>

@@ -1,5 +1,7 @@
-import { apiGet, apiPost } from './http';
+import { apiGet, apiPatchForm, apiPost } from './http';
 import type { User } from '@/types';
+
+const API_BASE_URL = process.env.API_BASE_URL || '/api';
 
 export interface LoginPayload {
   email: string;
@@ -18,6 +20,13 @@ export interface AuthMessageResponse {
   message?: string;
 }
 
+export interface AvatarUploadResponse {
+  message?: string;
+  avatarUrl?: string;
+  avatar?: string;
+  data?: { avatarUrl?: string; avatar?: string };
+}
+
 type RawUser = Partial<User> & {
   id?: string | number;
   name?: string;
@@ -28,6 +37,13 @@ type RawUser = Partial<User> & {
   trustScore?: number;
   trust_rank?: string;
   trustRank?: string;
+  good_return_streak?: number;
+  goodReturnStreak?: number;
+  studentCode?: string;
+  student_code?: string;
+  className?: string;
+  class_name?: string;
+  phone?: string;
   student?: Partial<User> & {
     fullName?: string;
     full_name?: string;
@@ -39,6 +55,13 @@ type RawUser = Partial<User> & {
     trust_score?: number;
     trustRank?: string;
     trust_rank?: string;
+    goodReturnStreak?: number;
+    good_return_streak?: number;
+    studentCode?: string;
+    student_code?: string;
+    className?: string;
+    class_name?: string;
+    phone?: string;
   };
   data?: RawUser;
 };
@@ -46,6 +69,39 @@ type RawUser = Partial<User> & {
 interface MeResponse {
   message?: string;
   data?: RawUser;
+}
+
+function getApiOrigin() {
+  if (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://')) {
+    try {
+      return new URL(API_BASE_URL).origin;
+    } catch {
+      return '';
+    }
+  }
+
+  return '';
+}
+
+export function normalizeUploadUrl(value?: string | null) {
+  const rawUrl = value?.trim();
+  if (!rawUrl) return undefined;
+
+  if (/^(https?:|data:|blob:)/i.test(rawUrl)) return rawUrl;
+
+  const normalizedPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
+  const apiOrigin = getApiOrigin();
+
+  if (normalizedPath.startsWith('/uploads/')) {
+    return apiOrigin ? `${apiOrigin}${normalizedPath}` : normalizedPath;
+  }
+
+  if (normalizedPath.startsWith('/api/uploads/')) {
+    const uploadPath = normalizedPath.replace(/^\/api/, '');
+    return apiOrigin ? `${apiOrigin}${uploadPath}` : uploadPath;
+  }
+
+  return apiOrigin ? `${apiOrigin}${normalizedPath}` : normalizedPath;
 }
 
 function normalizeUser(raw: RawUser): User {
@@ -59,11 +115,15 @@ function normalizeUser(raw: RawUser): User {
     name: source.name ?? fullName,
     email: source.email ?? '',
     role: source.role ?? 'student',
+    studentCode: source.studentCode ?? source.student_code ?? student?.studentCode ?? student?.student_code,
+    className: source.className ?? source.class_name ?? student?.className ?? student?.class_name,
+    phone: source.phone ?? student?.phone,
     token: source.token,
-    avatar: source.avatar ?? source.avatarUrl ?? source.avatar_url ?? student?.avatar ?? student?.avatarUrl ?? student?.avatar_url,
-    avatarUrl: source.avatarUrl ?? source.avatar_url ?? source.avatar ?? student?.avatarUrl ?? student?.avatar_url ?? student?.avatar,
+    avatar: normalizeUploadUrl(source.avatar ?? source.avatarUrl ?? source.avatar_url ?? student?.avatar ?? student?.avatarUrl ?? student?.avatar_url),
+    avatarUrl: normalizeUploadUrl(source.avatarUrl ?? source.avatar_url ?? source.avatar ?? student?.avatarUrl ?? student?.avatar_url ?? student?.avatar),
     trustScore: source.trustScore ?? source.trust_score ?? student?.trustScore ?? student?.trust_score,
-    trustRank: source.trustRank ?? source.trust_rank ?? student?.trustRank ?? student?.trust_rank
+    trustRank: source.trustRank ?? source.trust_rank ?? student?.trustRank ?? student?.trust_rank,
+    goodReturnStreak: source.goodReturnStreak ?? source.good_return_streak ?? student?.goodReturnStreak ?? student?.good_return_streak
   };
 }
 
@@ -85,4 +145,24 @@ export function forgotPassword(email: string) {
 
 export function resetPassword(token: string, newPassword: string) {
   return apiPost<AuthMessageResponse>('/auth/reset-password', { token, newPassword });
+}
+
+export function uploadMyAvatar(file: File) {
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  return apiPatchForm<AvatarUploadResponse>('/students/me/avatar', formData).then((response) => ({
+    ...response,
+    avatarUrl: normalizeUploadUrl(response.avatarUrl ?? response.avatar ?? response.data?.avatarUrl ?? response.data?.avatar)
+  }));
+}
+
+export function uploadCurrentUserAvatar(file: File) {
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  return apiPatchForm<AvatarUploadResponse>('/auth/me/avatar', formData).then((response) => ({
+    ...response,
+    avatarUrl: normalizeUploadUrl(response.avatarUrl ?? response.avatar ?? response.data?.avatarUrl ?? response.data?.avatar)
+  }));
 }

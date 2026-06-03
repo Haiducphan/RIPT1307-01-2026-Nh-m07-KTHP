@@ -1,98 +1,33 @@
 import { useMemo, useState } from 'react';
-import { Avatar, Badge, Button, Empty, List, Space, Tabs, Tag, Typography } from 'antd';
-type NotificationCategory = 'request' | 'trust' | 'system';
-type NotificationType = 'approved' | 'reminder' | 'streak' | 'returned' | 'rejected' | 'system';
+import { Avatar, Badge, Button, Empty, List, message, Space, Tabs, Tag, Tooltip, Typography } from 'antd';
+import dayjs from 'dayjs';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import { getMyNotifications, markNotificationRead } from '@/services/notifications';
+import type { NotificationCategory, NotificationItem } from '@/services/notifications';
+
 type NotificationTab = 'all' | 'unread' | NotificationCategory;
-interface NotificationItem {
-  id: string;
-  type: NotificationType;
-  icon: string;
-  title: string;
-  content: string;
-  time: string;
-  isRead: boolean;
-  category: NotificationCategory;
-}
-const mockNotifications: NotificationItem[] = [
-  {
-    id: '1',
-    type: 'approved',
-    icon: '✓',
-    title: 'Yêu cầu #REQ-2026-0140 đã được duyệt',
-    content:
-      'Đơn mượn Micro Shure SM58 x 2 đã được Admin duyệt. Vui lòng đến phòng CLB nhận thiết bị trước 11/05/2026 (còn 1 ngày).',
-    time: '2 giờ trước',
-    isRead: false,
-    category: 'request'
-  },
-  {
-    id: '2',
-    type: 'reminder',
-    icon: '⏰',
-    title: 'Sắp đến hạn trả thiết bị',
-    content:
-      'Đơn mượn Loa kéo JBL x 1 (đơn #0138) sẽ đến hạn trả vào 11/05/2026 (còn 1 ngày). Vui lòng mang đồ đến CLB đúng hẹn.',
-    time: '5 giờ trước',
-    isRead: false,
-    category: 'request'
-  },
-  {
-    id: '3',
-    type: 'streak',
-    icon: '🎉',
-    title: 'Bạn đã đạt chuỗi mượn trả tốt 5 lần',
-    content:
-      'Cảm ơn ý thức tốt của bạn! Bạn được cộng +7 điểm uy tín. Tiếp tục giữ chuỗi để nhận thêm phần thưởng.',
-    time: '1 ngày trước',
-    isRead: false,
-    category: 'trust'
-  },
-  {
-    id: '4',
-    type: 'returned',
-    icon: '✓',
-    title: 'Đã ghi nhận trả thiết bị',
-    content: 'Đơn #0131 (Máy chiếu Epson) đã được trả đúng hạn. Bạn được cộng +2 điểm uy tín.',
-    time: '3 ngày trước',
-    isRead: true,
-    category: 'trust'
-  },
-  {
-    id: '5',
-    type: 'rejected',
-    icon: '✗',
-    title: 'Yêu cầu #REQ-2026-0125 đã bị từ chối',
-    content:
-      'Lý do: Thiết bị Sony A7 III đã được CLB lên lịch sử dụng cho sự kiện cùng thời điểm. Bạn có thể đặt lại với thời gian khác.',
-    time: '5 ngày trước',
-    isRead: true,
-    category: 'request'
-  },
-  {
-    id: '6',
-    type: 'system',
-    icon: '📢',
-    title: 'Cập nhật quy định mượn trả',
-    content:
-      'CLB đã cập nhật quy định: thời gian giữ chỗ sau khi duyệt được rút xuống còn 48h. Vui lòng đến nhận thiết bị đúng hẹn.',
-    time: '1 tuần trước',
-    isRead: true,
-    category: 'system'
-  }
-];
-const TYPE_STYLE: Record<NotificationType, { color: string; bg: string }> = {
-  approved: { color: '#2F6F3E', bg: '#E1EFE3' },
-  reminder: { color: '#8B6A1F', bg: '#F5EBD0' },
-  streak: { color: '#2563EB', bg: '#DCE4F0' },
-  returned: { color: '#2F6F3E', bg: '#E1EFE3' },
-  rejected: { color: '#9B3E33', bg: '#F2DDD7' },
-  system: { color: '#2563EB', bg: '#DCE4F0' }
+
+const TYPE_STYLE: Record<string, { color: string; bg: string; icon: string }> = {
+  request_approved: { color: '#2F6F3E', bg: '#E1EFE3', icon: '✓' },
+  request_rejected: { color: '#9B3E33', bg: '#F2DDD7', icon: '✗' },
+  pickup_reminder: { color: '#8B6A1F', bg: '#F5EBD0', icon: '!' },
+  return_reminder: { color: '#8B6A1F', bg: '#F5EBD0', icon: '!' },
+  overdue_warning: { color: '#9B3E33', bg: '#F2DDD7', icon: '!' },
+  trust_point_added: { color: '#2F6F3E', bg: '#E1EFE3', icon: '+' },
+  trust_point_deducted: { color: '#9B3E33', bg: '#F2DDD7', icon: '-' },
+  streak_bonus: { color: '#2563EB', bg: '#DCE4F0', icon: '+' },
+  account_locked: { color: '#9B3E33', bg: '#F2DDD7', icon: '!' },
+  tier_changed: { color: '#2563EB', bg: '#DCE4F0', icon: '★' },
+  new_request: { color: '#2563EB', bg: '#DCE4F0', icon: 'i' },
+  system_announcement: { color: '#2563EB', bg: '#DCE4F0', icon: 'i' }
 };
+
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   request: 'Đơn mượn',
   trust: 'Điểm uy tín',
   system: 'Hệ thống'
 };
+
 function getFilteredNotifications(notifications: NotificationItem[], activeTab: NotificationTab) {
   if (activeTab === 'unread') return notifications.filter((item) => !item.isRead);
   if (activeTab === 'request' || activeTab === 'trust' || activeTab === 'system') {
@@ -100,44 +35,21 @@ function getFilteredNotifications(notifications: NotificationItem[], activeTab: 
   }
   return notifications;
 }
-function HighlightContent({ item }: { item: NotificationItem }) {
-  if (item.id === '1') {
-    return (
-      <>
-        Đơn mượn Micro Shure SM58 x 2 đã được Admin duyệt. Vui lòng đến phòng CLB nhận thiết bị trước{' '}
-        <Typography.Text strong>11/05/2026 (còn 1 ngày)</Typography.Text>.
-      </>
-    );
-  }
-  if (item.id === '2') {
-    return (
-      <>
-        Đơn mượn Loa kéo JBL x 1 (đơn #0138) sẽ đến hạn trả vào{' '}
-        <Typography.Text strong>11/05/2026</Typography.Text> (còn 1 ngày). Vui lòng mang đồ đến CLB đúng hẹn.
-      </>
-    );
-  }
-  if (item.id === '3') {
-    return (
-      <>
-        Cảm ơn ý thức tốt của bạn! Bạn được cộng <Typography.Text strong>+7 điểm uy tín</Typography.Text>. Tiếp tục
-        giữ chuỗi để nhận thêm phần thưởng.
-      </>
-    );
-  }
-  if (item.id === '4') {
-    return (
-      <>
-        Đơn #0131 (Máy chiếu Epson) đã được trả đúng hạn. Bạn được cộng{' '}
-        <Typography.Text strong>+2 điểm uy tín</Typography.Text>.
-      </>
-    );
-  }
-  return <>{item.content}</>;
+
+function formatNotificationTime(value?: string) {
+  if (!value) return 'Chưa có thời gian';
+  const date = dayjs(value);
+  return date.isValid() ? date.format('DD/MM/YYYY HH:mm') : value;
 }
+
+function getTypeStyle(type: string) {
+  return TYPE_STYLE[type] ?? TYPE_STYLE.system_announcement;
+}
+
 export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<NotificationTab>('all');
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [readingId, setReadingId] = useState<string>();
+  const { data: notifications = [], loading, refresh } = useAsyncData(getMyNotifications, []);
   const counts = useMemo(
     () => ({
       all: notifications.length,
@@ -152,14 +64,21 @@ export default function NotificationsPage() {
     () => getFilteredNotifications(notifications, activeTab),
     [activeTab, notifications]
   );
-  const markAsRead = (id: string) => {
-    setNotifications((current) =>
-      current.map((item) => (item.id === id ? { ...item, isRead: true } : item))
-    );
+
+  const markAsRead = async (item: NotificationItem) => {
+    if (item.isRead || readingId) return;
+
+    setReadingId(item.id);
+    try {
+      await markNotificationRead(item.id);
+      await refresh();
+    } catch {
+      message.error('Không thể đánh dấu thông báo đã đọc', 3);
+    } finally {
+      setReadingId(undefined);
+    }
   };
-  const markAllAsRead = () => {
-    setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
-  };
+
   const tabItems = [
     { key: 'all', label: `Tất cả (${counts.all})` },
     { key: 'unread', label: `Chưa đọc (${counts.unread})` },
@@ -167,6 +86,7 @@ export default function NotificationsPage() {
     { key: 'trust', label: `Điểm uy tín (${counts.trust})` },
     { key: 'system', label: `Hệ thống (${counts.system})` }
   ];
+
   return (
     <div style={{ paddingBottom: 48 }}>
       <div
@@ -193,12 +113,14 @@ export default function NotificationsPage() {
             Thông báo của tôi
           </h1>
           <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
-            Cập nhật về các đơn mượn và điểm uy tín
+            Cập nhật về các đơn mượn và điểm uy tín từ hệ thống
           </p>
         </div>
-        <Button disabled={counts.unread === 0} onClick={markAllAsRead}>
-          Đánh dấu đã đọc tất cả
-        </Button>
+        <Tooltip title="Chức năng cần API">
+          <span>
+            <Button disabled>Đánh dấu đã đọc tất cả</Button>
+          </span>
+        </Tooltip>
       </div>
       <Tabs
         activeKey={activeTab}
@@ -217,22 +139,20 @@ export default function NotificationsPage() {
       >
         {filteredNotifications.length === 0 ? (
           <Empty
-            image={<div style={{ fontSize: notifications.length === 0 ? 80 : 64 }}>{notifications.length === 0 ? '🔔' : activeTab === 'unread' ? '✅' : '📭'}</div>}
-            styles={{ image: { height: 96, marginBottom: 16 } }}
             description={
               <div>
                 <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>
                   {notifications.length === 0
-                    ? 'Chưa có thông báo nào'
+                    ? 'Chưa có thông báo từ hệ thống'
                     : activeTab === 'unread'
                       ? 'Bạn đã đọc hết thông báo'
                       : 'Không có thông báo trong mục này'}
                 </h3>
                 <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
                   {notifications.length === 0
-                    ? 'Khi có cập nhật về đơn mượn hoặc điểm uy tín, bạn sẽ thấy ở đây.'
+                    ? 'Khi BE trả về thông báo mới, danh sách sẽ hiển thị tại đây.'
                     : activeTab === 'unread'
-                      ? 'Tuyệt vời! Không còn thông báo chưa đọc nào.'
+                      ? 'Không còn thông báo chưa đọc nào từ API.'
                       : 'Chuyển sang tab khác để xem các thông báo phù hợp.'}
                 </p>
               </div>
@@ -241,19 +161,21 @@ export default function NotificationsPage() {
           />
         ) : (
           <List
+            loading={loading}
             dataSource={filteredNotifications}
             split={false}
             renderItem={(item) => {
-              const typeStyle = TYPE_STYLE[item.type];
+              const typeStyle = getTypeStyle(item.type);
               return (
                 <List.Item
-                  onClick={() => markAsRead(item.id)}
+                  onClick={() => markAsRead(item)}
                   style={{
-                    cursor: 'pointer',
+                    cursor: item.isRead || readingId ? 'default' : 'pointer',
                     padding: '18px 20px',
                     background: item.isRead ? '#FFFFFF' : '#FBF8F2',
                     borderBottom: '1px solid #EFEADA',
-                    alignItems: 'flex-start'
+                    alignItems: 'flex-start',
+                    opacity: readingId === item.id ? 0.72 : 1
                   }}
                 >
                   <List.Item.Meta
@@ -267,7 +189,7 @@ export default function NotificationsPage() {
                           fontSize: 22
                         }}
                       >
-                        {item.icon}
+                        {typeStyle.icon}
                       </Avatar>
                     }
                     title={
@@ -286,9 +208,9 @@ export default function NotificationsPage() {
                           ellipsis={{ rows: 2 }}
                           style={{ color: '#6B6F6C', fontSize: 13, lineHeight: 1.6, marginBottom: 6 }}
                         >
-                          <HighlightContent item={item} />
+                          {item.content || 'Không có nội dung thông báo'}
                         </Typography.Paragraph>
-                        <Typography.Text style={{ color: '#9A9D98', fontSize: 12 }}>{item.time}</Typography.Text>
+                        <Typography.Text style={{ color: '#9A9D98', fontSize: 12 }}>{formatNotificationTime(item.createdAt)}</Typography.Text>
                       </div>
                     }
                   />

@@ -34,7 +34,7 @@ export default function StudentGuard() {
   }
 
   if (currentUser.role !== 'student') {
-    return <Navigate to={ROUTES.adminRequests} replace />;
+    return <Navigate to={ROUTES.adminDashboard} replace />;
   }
 
   return <Outlet />;

@@ -22,14 +22,10 @@ export default function LoginPage() {
       const latestUser = await getMe();
       const syncedUser = { ...latestUser, token: user.token };
       signIn(syncedUser);
-      history.push(syncedUser.role === 'admin' ? ROUTES.adminRequests : ROUTES.studentDevices);
+      history.push(syncedUser.role === 'admin' ? ROUTES.adminDashboard : ROUTES.studentDevices);
     } catch {
       message.error('Đăng nhập thất bại');
     }
-  };
-
-  const showSchoolLoginNotice = () => {
-    message.info('Tính năng đang phát triển', 2);
   };
 
   return (
@@ -152,14 +148,14 @@ export default function LoginPage() {
                 Chào mừng trở lại
               </Typography.Title>
               <Typography.Text style={{ color: '#7B7F7A', fontSize: 22 }}>
-                Đăng nhập bằng tài khoản sinh viên hoặc admin của CLB
+                Đăng nhập bằng tài khoản CLB
               </Typography.Text>
             </div>
 
             <Form<LoginFormValues>
               form={form}
               layout="vertical"
-              initialValues={{ email: 'student@example.com', password: '123456', role: 'student' }}
+              initialValues={{ role: 'student' }}
               onFinish={handleSubmit}
               requiredMark={false}
             >
@@ -169,13 +165,13 @@ export default function LoginPage() {
 
               <Form.Item
                 name="email"
-                label={<span style={{ fontSize: 18, fontWeight: 700, color: '#1A1F1B' }}>Mã sinh viên / Email</span>}
+                label={<span style={{ fontSize: 18, fontWeight: 700, color: '#1A1F1B' }}>Email</span>}
                 rules={[{ required: true }]}
                 style={{ marginBottom: 28 }}
               >
                 <Input
                   size="large"
-                  placeholder="student@example.com"
+                  placeholder="Nhập email"
                   style={{ height: 58, borderRadius: 12, borderColor: '#E5DECB', fontSize: 20, paddingInline: 20 }}
                 />
               </Form.Item>
@@ -188,7 +184,7 @@ export default function LoginPage() {
               >
                 <Input.Password
                   size="large"
-                  placeholder="123456"
+                  placeholder="Nhập mật khẩu"
                   style={{ height: 58, borderRadius: 12, borderColor: '#E5DECB', fontSize: 20, paddingInline: 20 }}
                 />
               </Form.Item>
@@ -212,21 +208,6 @@ export default function LoginPage() {
                 Đăng nhập
               </Button>
             </Form>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 22, margin: '42px 0 34px' }}>
-              <div style={{ height: 1, background: '#E5DECB' }} />
-              <Typography.Text style={{ color: '#9A9D98', fontSize: 18 }}>hoặc</Typography.Text>
-              <div style={{ height: 1, background: '#E5DECB' }} />
-            </div>
-
-            <Button
-              block
-              size="large"
-              onClick={showSchoolLoginNotice}
-              style={{ height: 64, borderRadius: 12, borderColor: '#E5DECB', color: '#1A1F1B', fontSize: 18, fontWeight: 700 }}
-            >
-              📘 Đăng nhập bằng tài khoản trường
-            </Button>
 
             <Typography.Text style={{ display: 'block', textAlign: 'center', color: '#8A8E88', fontSize: 18, marginTop: 34 }}>
               Chưa có tài khoản?{' '}

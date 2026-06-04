@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, Col, Empty, Grid, Input, Row, Skeleton } from 'antd';
 import { history } from 'umi';
 import EquipmentCard from '@/components/EquipmentCard';
@@ -19,7 +19,8 @@ type DisplayDevice = Device & {
   tier?: DeviceTier;
 };
 
-const FILTERS = ['Tất cả', 'Âm thanh', 'Hình ảnh', 'Trình chiếu', 'Phụ kiện', '⚡ Còn hàng'];
+const ALL_FILTER = 'Tất cả';
+const IN_STOCK_FILTER = 'Còn hàng';
 const ACTIVE_BORROW_STATUSES: BorrowStatus[] = ['borrowed', 'borrowing', 'overdue'];
 const RETURNED_STATUSES: BorrowStatus[] = ['returned', 'returned_ontime', 'returned_late'];
 
@@ -34,14 +35,7 @@ function normalizeText(value: string) {
 
 function getDisplayName(fullName?: string) {
   const name = fullName?.trim();
-  if (!name) return 'bạn';
-
-  const legacyNames: Record<string, string> = {
-    'Nguyen Van A': 'Nguyễn Văn A',
-    'Quan tri vien': 'Quản trị viên'
-  };
-
-  return legacyNames[name] ?? name;
+  return name || 'bạn';
 }
 
 function getDeviceIcon(device: Device) {
@@ -59,6 +53,8 @@ function getDeviceIcon(device: Device) {
 }
 
 function getDeviceTier(device: Device): DeviceTier {
+  if (device.tier === 'S' || device.tier === 'A' || device.tier === 'B' || device.tier === 'C') return device.tier;
+
   const text = normalizeText(`${device.name} ${device.category}`);
 
   if (text.includes('epson') || text.includes('canon') || text.includes('may chieu')) return 'S';
@@ -83,17 +79,9 @@ function getDeviceDescription(device: Device) {
 }
 
 function matchFilter(device: Device, filter: string) {
-  if (filter === 'Tất cả') return true;
-  if (filter === '⚡ Còn hàng') return device.availableQuantity > 0;
-
-  const text = normalizeText(`${device.name} ${device.category}`);
-
-  if (filter === 'Âm thanh') return text.includes('am thanh') || text.includes('micro') || text.includes('loa');
-  if (filter === 'Hình ảnh') return text.includes('hinh anh') || text.includes('may anh') || text.includes('camera');
-  if (filter === 'Trình chiếu') return text.includes('trinh chieu') || text.includes('may chieu');
-  if (filter === 'Phụ kiện') return text.includes('phu kien') || text.includes('tripod') || text.includes('den') || text.includes('tai nghe');
-
-  return true;
+  if (filter === ALL_FILTER) return true;
+  if (filter === IN_STOCK_FILTER) return device.availableQuantity > 0;
+  return normalizeText(device.category) === normalizeText(filter);
 }
 
 function getRequestTime(request: NormalizedBorrowRequest) {
@@ -121,7 +109,7 @@ export default function StudentDevicesPage() {
   const { data: devices = [], loading } = useAsyncData(getDevices);
   const { data: myRequests = [] } = useAsyncData(getMyBorrowRequests);
   const [searchText, setSearchText] = useState('');
-  const [activeFilter, setActiveFilter] = useState(FILTERS[0]);
+  const [activeFilter, setActiveFilter] = useState(ALL_FILTER);
 
   const userMeta = currentUser as (typeof currentUser & {
     trustScore?: number;
@@ -140,8 +128,20 @@ export default function StudentDevicesPage() {
     [devices]
   );
 
+  const filterOptions = useMemo(() => {
+    const categories = Array.from(
+      new Set(displayDevices.map((device) => device.category?.trim()).filter((category): category is string => Boolean(category)))
+    ).sort((first, second) => first.localeCompare(second, 'vi'));
+
+    return [ALL_FILTER, ...categories, IN_STOCK_FILTER];
+  }, [displayDevices]);
+
+  useEffect(() => {
+    if (!filterOptions.includes(activeFilter)) setActiveFilter(ALL_FILTER);
+  }, [activeFilter, filterOptions]);
+
   const availableCount = useMemo(
-    () => displayDevices.reduce((total, device) => total + device.availableQuantity, 0),
+    () => displayDevices.filter((device) => device.availableQuantity > 0).length,
     [displayDevices]
   );
 
@@ -186,7 +186,7 @@ export default function StudentDevicesPage() {
         <div>
           <h1
             style={{
-              fontFamily: 'Georgia, serif',
+              fontFamily: 'var(--app-heading-font)',
               fontSize: 34,
               fontWeight: 500,
               lineHeight: 1.1,
@@ -239,7 +239,7 @@ export default function StudentDevicesPage() {
           style={{ width: 360, maxWidth: '100%' }}
         />
 
-        {FILTERS.map((filter) => {
+        {filterOptions.map((filter) => {
           const active = activeFilter === filter;
 
           return (
@@ -298,7 +298,7 @@ export default function StudentDevicesPage() {
           <Button
             onClick={() => {
               setSearchText('');
-              setActiveFilter(FILTERS[0]);
+              setActiveFilter(ALL_FILTER);
             }}
           >
             Xoá bộ lọc

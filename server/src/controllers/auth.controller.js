@@ -90,9 +90,19 @@ async function me(req, res) {
     if (req.user.role === 'student') {
       const studentInfo = await Student.findOne({ where: { userId: req.user.id } });
       if (studentInfo) {
+        userData.studentId = studentInfo.id;
+        userData.studentCode = studentInfo.studentCode;
+        userData.className = studentInfo.className;
+        userData.phone = studentInfo.phone;
         userData.avatarUrl = studentInfo.avatarUrl;
         userData.trustScore = studentInfo.trustScore;
         userData.trustRank = studentInfo.trustRank;
+        userData.goodReturnStreak = studentInfo.goodReturnStreak;
+        userData.borrowLocked = studentInfo.borrowLocked;
+        userData.borrowLockUntil = studentInfo.borrowLockUntil;
+        userData.borrowLockReason = studentInfo.borrowLockReason;
+        userData.isPermanentlyLocked = studentInfo.isPermanentlyLocked;
+        userData.permanentLockReason = studentInfo.permanentLockReason;
       }
     }
 

@@ -101,7 +101,7 @@ export default function RegisterPage() {
                 display: 'grid',
                 placeItems: 'center',
                 color: '#F5EBD0',
-                fontFamily: 'Georgia, serif',
+                fontFamily: 'var(--app-heading-font)',
                 fontSize: 34,
                 fontStyle: 'italic',
                 fontWeight: 700
@@ -114,7 +114,7 @@ export default function RegisterPage() {
               <Typography.Title
                 level={1}
                 style={{
-                  fontFamily: 'Georgia, serif',
+                  fontFamily: 'var(--app-heading-font)',
                   fontSize: 68,
                   lineHeight: 1.08,
                   fontWeight: 500,
@@ -159,7 +159,7 @@ export default function RegisterPage() {
               <Typography.Title
                 level={1}
                 style={{
-                  fontFamily: 'Georgia, serif',
+                  fontFamily: 'var(--app-heading-font)',
                   fontSize: 44,
                   lineHeight: 1.1,
                   fontWeight: 600,
@@ -190,7 +190,7 @@ export default function RegisterPage() {
                 rules={[{ required: true, whitespace: true, message: 'Nhập họ và tên' }]}
                 style={{ marginBottom: 14 }}
               >
-                <Input placeholder="Nguyễn Văn A" style={{ height: 48, borderRadius: 12, borderColor: '#E5DECB', fontSize: 16 }} />
+                <Input placeholder="Nhập họ và tên" style={{ height: 48, borderRadius: 12, borderColor: '#E5DECB', fontSize: 16 }} />
               </Form.Item>
 
               <Form.Item
@@ -285,13 +285,7 @@ export default function RegisterPage() {
               </Button>
             </Form>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 22, margin: '30px 0 24px' }}>
-              <div style={{ height: 1, background: '#E5DECB' }} />
-              <Typography.Text style={{ color: '#9A9D98', fontSize: 16 }}>hoặc</Typography.Text>
-              <div style={{ height: 1, background: '#E5DECB' }} />
-            </div>
-
-            <Typography.Text style={{ display: 'block', textAlign: 'center', color: '#8A8E88', fontSize: 16 }}>
+            <Typography.Text style={{ display: 'block', textAlign: 'center', color: '#8A8E88', fontSize: 16, marginTop: 24 }}>
               Đã có tài khoản?{' '}
               <Link to="/login" style={{ color: '#2D4A3E', fontWeight: 700, cursor: 'pointer' }}>
                 Đăng nhập

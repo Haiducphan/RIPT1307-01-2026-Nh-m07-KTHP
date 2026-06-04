@@ -35,9 +35,15 @@ export interface User {
   token?: string;
   avatar?: string;
   avatarUrl?: string;
+  studentId?: string | number;
   trustScore?: number;
   trustRank?: 'diamond' | 'gold' | 'silver' | 'bronze' | 'stone' | string;
   goodReturnStreak?: number;
+  borrowLocked?: boolean;
+  borrowLockUntil?: string;
+  borrowLockReason?: string;
+  isPermanentlyLocked?: boolean;
+  permanentLockReason?: string;
 }
 
 export interface Device {

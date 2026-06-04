@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Col, DatePicker, Empty, Form, Input, InputNumber, message, Row, Select, Spin, Tag } from 'antd';
+import { Alert, Button, Card, Col, DatePicker, Empty, Form, Input, InputNumber, message, Row, Spin, Tag } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { history, useLocation } from 'umi';
@@ -16,11 +16,8 @@ interface BorrowFormValues {
   borrowDate: Dayjs;
   returnDate: Dayjs;
   quantity: number;
-  eventName: string;
   purpose: string;
 }
-
-const EVENT_OPTIONS = ['Đêm nhạc CLB tháng 5', 'Sự kiện khác', 'Học tập'];
 
 const RANK_LABEL: Record<TrustRank, string> = {
   diamond: 'Kim cương',
@@ -69,6 +66,8 @@ function getDeviceIcon(device: Device) {
 }
 
 function getDeviceTier(device: Device): DeviceTier {
+  if (device.tier === 'S' || device.tier === 'A' || device.tier === 'B' || device.tier === 'C') return device.tier;
+
   const text = normalizeText(`${device.name} ${device.category}`);
 
   if (text.includes('epson') || text.includes('canon') || text.includes('may chieu')) return 'S';
@@ -89,6 +88,25 @@ function getDeviceDescription(device: Device) {
   if (text.includes('tripod') || text.includes('chan may')) return 'Phụ kiện hỗ trợ quay chụp ổn định trong nhiều bối cảnh.';
   if (text.includes('den') || text.includes('led')) return 'Đèn hỗ trợ quay chụp trong không gian trong nhà.';
   return 'Thiết bị sẵn sàng cho sinh viên đăng ký mượn theo lịch sử dụng.';
+}
+
+function deriveRankFromTrustScore(score: number): TrustRank {
+  if (score >= 90) return 'diamond';
+  if (score >= 80) return 'gold';
+  if (score >= 66) return 'silver';
+  if (score >= 50) return 'bronze';
+  return 'stone';
+}
+
+function normalizeTrustRank(rank?: string): TrustRank | undefined {
+  const normalized = rank?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (['diamond', 'kim cương', 'kim cuong'].includes(normalized)) return 'diamond';
+  if (['gold', 'vàng', 'vang'].includes(normalized)) return 'gold';
+  if (['silver', 'bạc', 'bac'].includes(normalized)) return 'silver';
+  if (['bronze', 'đồng', 'dong'].includes(normalized)) return 'bronze';
+  if (['stone', 'pebble', 'đá cuội', 'da cuoi'].includes(normalized)) return 'stone';
+  return undefined;
 }
 
 function EmptyBorrowState() {
@@ -121,11 +139,11 @@ export default function StudentBorrowPage() {
   }, [deviceId]);
 
   const userMeta = currentUser as (typeof currentUser & {
-    trustRank?: TrustRank;
+    trustRank?: string;
     trustScore?: number;
   });
-  const currentRank = userMeta?.trustRank ?? 'gold';
-  const currentScore = userMeta?.trustScore ?? 85;
+  const currentScore = typeof userMeta?.trustScore === 'number' ? userMeta.trustScore : undefined;
+  const currentRank = normalizeTrustRank(userMeta?.trustRank) ?? (currentScore !== undefined ? deriveRankFromTrustScore(currentScore) : undefined);
 
   if (loading) {
     return (
@@ -143,11 +161,11 @@ export default function StudentBorrowPage() {
   const tier = getDeviceTier(device);
   const description = getDeviceDescription(device);
   const requiredRank = REQUIRED_RANK_BY_TIER[tier];
-  const hasRequiredRank = RANK_SCORE[currentRank] >= RANK_SCORE[requiredRank];
+  const hasRequiredRank = currentRank ? RANK_SCORE[currentRank] >= RANK_SCORE[requiredRank] : false;
   const hasStock = device.availableQuantity > 0;
   const formDisabled = !hasRequiredRank || !hasStock;
   const borrowedQuantity = Math.max(device.totalQuantity - device.availableQuantity, 0);
-  const galleryItems = device.images?.length ? device.images : device.image ? [device.image] : ['icon-1', 'icon-2', 'icon-3'];
+  const galleryItems = device.images?.length ? device.images : device.image ? [device.image] : ['icon'];
   const activeGalleryItem = galleryItems[Math.min(activeImageIndex, galleryItems.length - 1)];
   const hasRealImages = Boolean(device.images?.length || device.image);
 
@@ -169,7 +187,7 @@ export default function StudentBorrowPage() {
         quantity: values.quantity,
         borrowDate: values.borrowDate.format('YYYY-MM-DD'),
         returnDate: values.returnDate.format('YYYY-MM-DD'),
-        note: `[${values.eventName}] ${values.purpose}`
+        purpose: values.purpose
       });
 
       message.success('Đã gửi yêu cầu mượn', 2);
@@ -221,7 +239,7 @@ export default function StudentBorrowPage() {
                   borderRadius: 999,
                   background: '#FFFFFF',
                   color: '#C99A3F',
-                  fontFamily: 'Georgia, serif',
+                  fontFamily: 'var(--app-heading-font)',
                   fontWeight: 700
                 }}
               >
@@ -272,7 +290,7 @@ export default function StudentBorrowPage() {
               </Row>
             )}
 
-            <h2 style={{ fontFamily: 'Georgia, serif', fontSize: 26, fontWeight: 500, lineHeight: 1.15, color: '#1A1F1B', margin: '0 0 8px' }}>
+            <h2 style={{ fontFamily: 'var(--app-heading-font)', fontSize: 26, fontWeight: 500, lineHeight: 1.15, color: '#1A1F1B', margin: '0 0 8px' }}>
               {device.name}
             </h2>
             <p style={{ color: '#6B6F6C', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}>{description}</p>
@@ -304,7 +322,7 @@ export default function StudentBorrowPage() {
               <Tag style={{ marginBottom: 12, border: 'none', borderRadius: 100, color: '#075985', background: '#E0F2FE', padding: '4px 12px' }}>
                 Yêu cầu hạng {RANK_LABEL[requiredRank]} · Thiết bị hạng {tier}
               </Tag>
-              <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 36, fontWeight: 500, lineHeight: 1.1, color: '#1A1F1B', margin: '0 0 8px' }}>
+              <h1 style={{ fontFamily: 'var(--app-heading-font)', fontSize: 36, fontWeight: 500, lineHeight: 1.1, color: '#1A1F1B', margin: '0 0 8px' }}>
                 Xác nhận yêu cầu mượn
               </h1>
               <p style={{ color: '#6B6F6C', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
@@ -319,7 +337,9 @@ export default function StudentBorrowPage() {
               message={hasStock ? 'Điều kiện mượn thiết bị' : 'Thiết bị hiện đã hết hàng'}
               description={
                 hasStock
-                  ? `Cần hạng ${RANK_LABEL[requiredRank]} để mượn thiết bị hạng ${tier}. Hạng hiện tại của bạn: ${RANK_LABEL[currentRank]} (${currentScore} điểm)${hasRequiredRank ? ' - đủ điều kiện.' : ' - chưa đủ điều kiện.'}`
+                  ? currentRank
+                    ? `Cần hạng ${RANK_LABEL[requiredRank]} để mượn thiết bị hạng ${tier}. Hạng hiện tại của bạn: ${RANK_LABEL[currentRank]}${currentScore !== undefined ? ` (${currentScore} điểm)` : ''}${hasRequiredRank ? ' - đủ điều kiện.' : ' - chưa đủ điều kiện.'}`
+                    : `Cần hạng ${RANK_LABEL[requiredRank]} để mượn thiết bị hạng ${tier}. Hồ sơ của bạn chưa có dữ liệu hạng uy tín để xác định điều kiện mượn.`
                   : 'Bạn chưa thể gửi yêu cầu mượn thiết bị này. Vui lòng quay lại danh sách và chọn thiết bị còn hàng.'
               }
             />
@@ -332,8 +352,7 @@ export default function StudentBorrowPage() {
               initialValues={{
                 borrowDate: dayjs(),
                 returnDate: dayjs().add(3, 'day'),
-                quantity: 1,
-                eventName: EVENT_OPTIONS[0]
+                quantity: 1
               }}
               onFinish={handleSubmit}
               scrollToFirstError
@@ -354,8 +373,8 @@ export default function StudentBorrowPage() {
                       ({ getFieldValue }) => ({
                         validator(_, value: Dayjs) {
                           const borrowDate = getFieldValue('borrowDate') as Dayjs | undefined;
-                          if (!value || !borrowDate || !value.isBefore(borrowDate, 'day')) return Promise.resolve();
-                          return Promise.reject(new Error('Ngày trả không được trước ngày mượn'));
+                          if (!value || !borrowDate || value.isAfter(borrowDate, 'day')) return Promise.resolve();
+                          return Promise.reject(new Error('Ngày trả phải sau ngày mượn'));
                         }
                       })
                     ]}
@@ -385,15 +404,10 @@ export default function StudentBorrowPage() {
                     <InputNumber min={1} max={device.availableQuantity} style={{ width: '100%', height: 42 }} />
                   </Form.Item>
                 </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item name="eventName" label="Sự kiện sử dụng" rules={[{ required: true, message: 'Chọn sự kiện sử dụng' }]}>
-                    <Select style={{ height: 42 }} options={EVENT_OPTIONS.map((eventName) => ({ value: eventName, label: eventName }))} />
-                  </Form.Item>
-                </Col>
               </Row>
 
               <Form.Item name="purpose" label="Mục đích mượn" rules={[{ required: true, whitespace: true, message: 'Mục đích mượn không được bỏ trống' }]}> 
-                <Input.TextArea rows={5} placeholder="Ví dụ: Quay video cho sự kiện Đêm nhạc CLB, dùng trong khung giờ 18:00 - 21:00..." />
+                <Input.TextArea rows={5} placeholder="Ví dụ: Dùng cho buổi thuyết trình nhóm, ghi rõ thời gian và bối cảnh sử dụng..." />
               </Form.Item>
 
               <Button

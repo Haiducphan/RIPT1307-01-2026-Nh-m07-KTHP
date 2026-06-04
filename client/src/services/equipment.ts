@@ -8,6 +8,7 @@ export interface EquipmentMutationPayload {
   categoryId: number;
   tier: string;
   totalQuantity: number;
+  availableQuantity?: number;
   description?: string;
   conditionStatus?: string;
   images?: File[];
@@ -77,6 +78,7 @@ function toFormData(payload: EquipmentMutationPayload) {
   formData.append('categoryId', String(payload.categoryId));
   formData.append('tier', payload.tier);
   formData.append('totalQuantity', String(payload.totalQuantity));
+  if (payload.availableQuantity !== undefined) formData.append('availableQuantity', String(payload.availableQuantity));
   formData.append('conditionStatus', payload.conditionStatus || 'good');
 
   if (payload.description !== undefined) formData.append('description', payload.description);

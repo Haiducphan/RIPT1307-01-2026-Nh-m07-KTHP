@@ -14,6 +14,7 @@ export interface DeviceStats {
   totalDeviceTypes: number;
   sumTotal: number;
   sumBorrowing: number;
+  sumUnavailable?: number;
   topDevices: TopDeviceStat[];
 }
 
@@ -31,13 +32,21 @@ export interface TopStudentStat {
   fullName: string;
   studentCode: string;
   trustScore: number;
+  trustRank?: string;
+  totalBorrowRequests?: number;
+  completedReturns?: number;
+  onTimeReturns?: number;
+  lateReturns?: number;
   totalBorrowed: number;
   totalLate: number;
+  onTimeRate?: number;
 }
 
 export interface StudentStatsSummary {
   totalStudents: number;
   currentlyBorrowing: number;
+  borrowedStudents?: number;
+  lateStudents?: number;
   topStudents: TopStudentStat[];
 }
 
@@ -93,14 +102,44 @@ function normalizeTopDevice(raw: unknown): TopDeviceStat {
 
 function normalizeTopStudent(raw: unknown): TopStudentStat {
   const record = asRecord(raw);
+  const completedReturns = toOptionalNumberValue(
+    record.completedReturns ??
+      record.completed_returns ??
+      record.returnedCompletedCount ??
+      record.returned_completed_count ??
+      record.totalCompletedReturns ??
+      record.total_completed_returns
+  );
+  const onTimeReturns = toOptionalNumberValue(
+    record.onTimeReturns ??
+      record.on_time_returns ??
+      record.onTimeReturnedCount ??
+      record.on_time_returned_count ??
+      record.totalOnTimeReturns ??
+      record.total_on_time_returns
+  );
+  const lateReturns = toOptionalNumberValue(
+    record.lateReturns ??
+      record.late_returns ??
+      record.lateReturnedCount ??
+      record.late_returned_count ??
+      record.totalLateReturns ??
+      record.total_late_returns
+  );
 
   return {
     id: String(record.id ?? ''),
     fullName: toStringValue(record.fullName ?? record.full_name ?? record.name) ?? 'Chưa có tên',
     studentCode: toStringValue(record.studentCode ?? record.student_code ?? record.mssv) ?? 'Chưa có MSSV',
     trustScore: toNumberValue(record.trustScore ?? record.trust_score),
-    totalBorrowed: toNumberValue(record.totalBorrowed ?? record.total_borrowed),
-    totalLate: toNumberValue(record.totalLate ?? record.total_late)
+    trustRank: toStringValue(record.trustRank ?? record.trust_rank ?? record.rank),
+    totalBorrowRequests: toOptionalNumberValue(record.totalBorrowRequests ?? record.total_borrow_requests ?? record.totalRequests ?? record.total_requests),
+    completedReturns,
+    onTimeReturns,
+    lateReturns,
+    totalBorrowed: completedReturns ?? toNumberValue(record.totalBorrowed ?? record.total_borrowed),
+    totalLate: lateReturns ?? toNumberValue(record.totalLate ?? record.total_late),
+    onTimeRate: toOptionalNumberValue(record.onTimeRate ?? record.on_time_rate ?? record.returnOnTimeRate ?? record.return_on_time_rate)
   };
 }
 
@@ -141,6 +180,7 @@ export function getDeviceStats(params?: { month?: number; year?: number }) {
       totalDeviceTypes: toNumberValue(data.totalDeviceTypes ?? data.total_device_types),
       sumTotal: toNumberValue(data.sumTotal ?? data.sum_total),
       sumBorrowing: toNumberValue(data.sumBorrowing ?? data.sum_borrowing),
+      sumUnavailable: toOptionalNumberValue(data.sumUnavailable ?? data.sum_unavailable ?? data.sumBroken ?? data.sum_broken ?? data.maintenanceCount ?? data.maintenance_count),
       topDevices: Array.isArray(data.topDevices) ? data.topDevices.map(normalizeTopDevice) : []
     } satisfies DeviceStats;
   });
@@ -166,13 +206,15 @@ export function getStatsStudentSummary() {
     return {
       totalStudents: toNumberValue(data.totalStudents ?? data.total_students),
       currentlyBorrowing: toNumberValue(data.currentlyBorrowing ?? data.currently_borrowing),
+      borrowedStudents: toOptionalNumberValue(data.borrowedStudents ?? data.borrowed_students ?? data.totalBorrowedStudents ?? data.total_borrowed_students),
+      lateStudents: toOptionalNumberValue(data.lateStudents ?? data.late_students ?? data.totalLateStudents ?? data.total_late_students),
       topStudents: Array.isArray(data.topStudents) ? data.topStudents.map(normalizeTopStudent) : []
     } satisfies StudentStatsSummary;
   });
 }
 
-export function getTimeTrendStats() {
-  return apiGet<ApiDataResponse<unknown[]> | unknown[]>('/stats/time-trend').then((response) => {
+export function getTimeTrendStats(params?: { year?: number }) {
+  return apiGet<ApiDataResponse<unknown[]> | unknown[]>(`/stats/time-trend${buildMonthQuery(params)}`).then((response) => {
     const rows = Array.isArray(response) ? response : Array.isArray(response.data) ? response.data : [];
     return rows.map(normalizeTimeTrend);
   });

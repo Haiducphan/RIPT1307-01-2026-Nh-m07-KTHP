@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Avatar, Badge, Button, Empty, List, message, Space, Tabs, Tag, Tooltip, Typography } from 'antd';
 import dayjs from 'dayjs';
+import { history } from 'umi';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { getMyNotifications, markNotificationRead } from '@/services/notifications';
 import type { NotificationCategory, NotificationItem } from '@/services/notifications';
+import { ROUTES } from '@/constants/routes';
 
 type NotificationTab = 'all' | 'unread' | NotificationCategory;
 
@@ -66,16 +68,25 @@ export default function NotificationsPage() {
   );
 
   const markAsRead = async (item: NotificationItem) => {
-    if (item.isRead || readingId) return;
+    if (item.isRead || readingId) return true;
 
     setReadingId(item.id);
     try {
       await markNotificationRead(item.id);
       await refresh();
+      return true;
     } catch {
       message.error('Không thể đánh dấu thông báo đã đọc', 3);
+      return false;
     } finally {
       setReadingId(undefined);
+    }
+  };
+
+  const handleNotificationClick = async (item: NotificationItem) => {
+    const marked = await markAsRead(item);
+    if (marked && item.relatedRequestId) {
+      history.push(`${ROUTES.studentRequests}?requestId=${encodeURIComponent(item.relatedRequestId)}`);
     }
   };
 
@@ -102,7 +113,7 @@ export default function NotificationsPage() {
         <div>
           <h1
             style={{
-              fontFamily: 'Georgia, serif',
+              fontFamily: 'var(--app-heading-font)',
               fontSize: 34,
               fontWeight: 500,
               lineHeight: 1.1,
@@ -116,7 +127,7 @@ export default function NotificationsPage() {
             Cập nhật về các đơn mượn và điểm uy tín từ hệ thống
           </p>
         </div>
-        <Tooltip title="Chức năng cần API">
+        <Tooltip title="Chức năng này sẽ khả dụng khi hệ thống hỗ trợ.">
           <span>
             <Button disabled>Đánh dấu đã đọc tất cả</Button>
           </span>
@@ -150,9 +161,9 @@ export default function NotificationsPage() {
                 </h3>
                 <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
                   {notifications.length === 0
-                    ? 'Khi BE trả về thông báo mới, danh sách sẽ hiển thị tại đây.'
+                    ? 'Khi có thông báo mới, danh sách sẽ hiển thị tại đây.'
                     : activeTab === 'unread'
-                      ? 'Không còn thông báo chưa đọc nào từ API.'
+                      ? 'Không còn thông báo chưa đọc nào.'
                       : 'Chuyển sang tab khác để xem các thông báo phù hợp.'}
                 </p>
               </div>
@@ -168,9 +179,9 @@ export default function NotificationsPage() {
               const typeStyle = getTypeStyle(item.type);
               return (
                 <List.Item
-                  onClick={() => markAsRead(item)}
+                  onClick={() => handleNotificationClick(item)}
                   style={{
-                    cursor: item.isRead || readingId ? 'default' : 'pointer',
+                    cursor: item.relatedRequestId || (!item.isRead && !readingId) ? 'pointer' : 'default',
                     padding: '18px 20px',
                     background: item.isRead ? '#FFFFFF' : '#FBF8F2',
                     borderBottom: '1px solid #EFEADA',

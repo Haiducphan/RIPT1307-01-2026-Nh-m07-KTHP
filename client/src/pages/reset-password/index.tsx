@@ -61,7 +61,7 @@ export default function ResetPasswordPage() {
       >
         <Typography.Title
           level={1}
-          style={{ fontFamily: 'Georgia, serif', fontSize: 38, color: '#1A1F1B', margin: '0 0 12px' }}
+          style={{ fontFamily: 'var(--app-heading-font)', fontSize: 38, color: '#1A1F1B', margin: '0 0 12px' }}
         >
           Đặt lại mật khẩu
         </Typography.Title>

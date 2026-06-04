@@ -12,9 +12,9 @@ import {
   LoadingOutlined,
   MenuOutlined,
   SafetyCertificateOutlined,
-  SendOutlined,
   TeamOutlined,
   WarningOutlined,
+  IdcardOutlined,
   UserOutlined
 } from '@ant-design/icons';
 import { Avatar, Button, Drawer, Layout, Menu, message, Space, Tooltip, Typography, Upload } from 'antd';
@@ -32,7 +32,8 @@ const RANK_LABEL: Record<string, string> = {
   gold: 'Vàng',
   silver: 'Bạc',
   bronze: 'Đồng',
-  stone: 'Đá'
+  pebble: 'Đá cuội',
+  stone: 'Đá cuội'
 };
 
 function getDisplayName(fullName?: string, name?: string) {
@@ -66,7 +67,7 @@ export default function AppLayout() {
   const displayName = getDisplayName(currentUser?.fullName, currentUser?.name);
   const avatarUrl = normalizeUploadUrl(currentUser?.avatarUrl || currentUser?.avatar);
   const trustScore = typeof currentUser?.trustScore === 'number' ? currentUser.trustScore : 0;
-  const trustRank = currentUser?.trustRank ? RANK_LABEL[currentUser.trustRank] ?? currentUser.trustRank : 'Đá';
+  const trustRank = currentUser?.trustRank ? RANK_LABEL[currentUser.trustRank] ?? currentUser.trustRank : 'Đá cuội';
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
   );
@@ -129,9 +130,9 @@ export default function AppLayout() {
 
   const studentItems: MenuProps['items'] = [
     { key: ROUTES.studentDevices, icon: <AppstoreOutlined />, label: 'Trang chủ' },
-    { key: ROUTES.studentBorrow, icon: <SendOutlined />, label: 'Gửi yêu cầu mượn' },
+    { key: ROUTES.studentRequests, icon: <ClockCircleOutlined />, label: 'Yêu cầu của tôi' },
     { key: ROUTES.studentNotifications, icon: <BellOutlined />, label: 'Thông báo' },
-    { key: ROUTES.studentRequests, icon: <ClockCircleOutlined />, label: 'Lịch sử mượn' },
+    { key: ROUTES.studentProfile, icon: <IdcardOutlined />, label: 'Hồ sơ & Uy tín' },
     { key: ROUTES.studentTrustRules, icon: <SafetyCertificateOutlined />, label: 'Quy tắc điểm uy tín' }
   ];
 

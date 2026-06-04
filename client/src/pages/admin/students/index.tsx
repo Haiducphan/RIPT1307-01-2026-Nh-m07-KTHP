@@ -13,7 +13,7 @@ import {
   Modal,
   Progress,
   Row,
-  Select,
+  Segmented,
   Table,
   Tabs,
   Tag,
@@ -21,6 +21,7 @@ import {
   Typography
 } from 'antd';
 import type { MenuProps } from 'antd';
+import { DownloadOutlined, EyeOutlined, MoreOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import {
@@ -31,8 +32,10 @@ import {
   toggleStudentLock
 } from '@/services/students';
 import type { StudentRank, StudentRecord, TrustScoreLogRecord } from '@/services/students';
+import { normalizeUploadUrl } from '@/services/auth';
 
-type StudentStatus = 'active' | 'locked' | 'warning';
+type StudentStatus = 'active' | 'borrowing' | 'locked' | 'warning';
+type StudentFilter = 'all' | 'borrowing' | 'overdue' | 'locked' | 'attention';
 
 interface RestoreFormValues {
   points: number;
@@ -49,18 +52,19 @@ interface UnlockFormValues {
   reason: string;
 }
 
-const RANK_CONFIG: Record<StudentRank, { label: string; color: string; bg: string }> = {
-  diamond: { label: 'Kim cương', color: '#075985', bg: '#E0F2FE' },
-  gold: { label: 'Vàng', color: '#8B6A1F', bg: '#F5EBD0' },
-  silver: { label: 'Bạc', color: '#4A5568', bg: '#ECEEF2' },
-  bronze: { label: 'Đồng', color: '#8C4A36', bg: '#F7E8DF' },
-  pebble: { label: 'Đá cuội', color: '#3F403D', bg: '#EFE9DD' }
+const RANK_CONFIG: Record<StudentRank, { label: string; range: string; caption: string; color: string; bg: string; border: string }> = {
+  diamond: { label: 'Kim cương', range: '90 - 100', caption: 'Mượn mọi thiết bị', color: '#075985', bg: '#E0F2FE', border: '#75BFE0' },
+  gold: { label: 'Vàng', range: '80 - 89', caption: 'Hạng A trở xuống', color: '#8B6A1F', bg: '#F5EBD0', border: '#D9B96A' },
+  silver: { label: 'Bạc', range: '66 - 79', caption: 'Hạng B trở xuống', color: '#4A5568', bg: '#ECEEF2', border: '#B8BFC8' },
+  bronze: { label: 'Đồng', range: '50 - 65', caption: 'Mượn hạng C', color: '#8C4A36', bg: '#F7E8DF', border: '#D9A088' },
+  pebble: { label: 'Đá cuội', range: '0 - 49', caption: 'Khoá mượn', color: '#3F403D', bg: '#EFE9DD', border: '#D7CDB8' }
 };
 
 const STATUS_CONFIG: Record<StudentStatus, { label: string; color: string }> = {
   active: { label: 'Hoạt động', color: 'green' },
+  borrowing: { label: 'Đang mượn', color: 'blue' },
   locked: { label: 'Bị khoá', color: 'red' },
-  warning: { label: 'Có cảnh báo', color: 'gold' }
+  warning: { label: 'Có quá hạn', color: 'gold' }
 };
 
 const TRUST_REASON_LABEL: Record<string, string> = {
@@ -68,14 +72,24 @@ const TRUST_REASON_LABEL: Record<string, string> = {
   return_ontime: 'Trả đúng hạn',
   streak_3: 'Thưởng chuỗi 3 lần trả tốt',
   streak_5: 'Thưởng chuỗi 5 lần trả tốt',
-  admin_manual_add: 'Admin cộng điểm thủ công',
-  admin_manual_deduct: 'Admin trừ điểm thủ công',
+  admin_manual_add: 'Quản trị viên cộng điểm thủ công',
+  admin_manual_deduct: 'Quản trị viên trừ điểm thủ công',
   cancel_approved: 'Huỷ đơn sau khi đã duyệt',
   noshow: 'Không đến nhận thiết bị',
   late_return: 'Quá hạn trả thiết bị',
   minor_damage: 'Thiết bị hư hỏng nhẹ',
   major_damage: 'Thiết bị hư hỏng nặng hoặc mất'
 };
+
+const RANK_ORDER: StudentRank[] = ['diamond', 'gold', 'silver', 'bronze', 'pebble'];
+
+const FILTER_OPTIONS: Array<{ label: string; value: StudentFilter }> = [
+  { label: 'Tất cả', value: 'all' },
+  { label: 'Đang mượn đồ', value: 'borrowing' },
+  { label: 'Có quá hạn', value: 'overdue' },
+  { label: 'Đã khoá', value: 'locked' },
+  { label: 'Cần chú ý', value: 'attention' }
+];
 
 function normalizeText(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
@@ -87,7 +101,8 @@ function getInitials(name: string) {
 
 function getStudentStatus(student: StudentRecord): StudentStatus {
   if (student.borrowLocked || student.isPermanentlyLocked) return 'locked';
-  if (student.totalLate > 0) return 'warning';
+  if (student.overdueCount > 0 || student.totalLate > 0) return 'warning';
+  if (student.currentBorrowing > 0) return 'borrowing';
   return 'active';
 }
 
@@ -115,7 +130,7 @@ function StatCard({ title, value, meta, danger }: { title: string; value: number
   return (
     <Card variant="borderless" style={{ borderRadius: 14, border: danger ? '1px solid #B05A4D' : '1px solid #E5DECB' }} styles={{ body: { padding: 20 } }}>
       <div style={{ color: '#6B6F6C', fontSize: 11, letterSpacing: 0 }}>{title}</div>
-      <div style={{ fontFamily: 'Georgia, serif', fontSize: 34, color: danger ? '#B05A4D' : '#1A1F1B', marginTop: 8 }}>{value}</div>
+      <div style={{ fontFamily: 'var(--app-heading-font)', fontSize: 34, color: danger ? '#B05A4D' : '#1A1F1B', marginTop: 8 }}>{value}</div>
       <div style={{ color: '#6B6F6C', fontSize: 12 }}>{meta}</div>
     </Card>
   );
@@ -148,8 +163,7 @@ export default function AdminStudentsPage() {
   const { data: studentList, loading, refresh } = useAsyncData(() => getStudents({ page: 1, limit: 1000 }), []);
   const { data: studentStats } = useAsyncData(getStudentStats, []);
   const [searchText, setSearchText] = useState('');
-  const [rankFilter, setRankFilter] = useState<StudentRank | 'all'>('all');
-  const [statusFilter, setStatusFilter] = useState<StudentStatus | 'all'>('all');
+  const [activeFilter, setActiveFilter] = useState<StudentFilter>('all');
   const [detailStudent, setDetailStudent] = useState<StudentRecord>();
   const [restoreStudent, setRestoreStudent] = useState<StudentRecord>();
   const [permanentLockStudent, setPermanentLockStudent] = useState<StudentRecord>();
@@ -184,28 +198,42 @@ export default function AdminStudentsPage() {
     const keyword = normalizeText(searchText.trim());
     return students.filter((student) => {
       const status = getStudentStatus(student);
-      const matchesSearch = !keyword || normalizeText(`${student.fullName} ${student.studentCode} ${student.email ?? ''}`).includes(keyword);
-      const matchesRank = rankFilter === 'all' || student.trustRank === rankFilter;
-      const matchesStatus = statusFilter === 'all' || status === statusFilter;
-      return matchesSearch && matchesRank && matchesStatus;
+      const matchesSearch = !keyword || normalizeText(`${student.fullName} ${student.studentCode} ${student.email ?? ''} ${student.className ?? ''}`).includes(keyword);
+      const matchesFilter =
+        activeFilter === 'all' ||
+        (activeFilter === 'borrowing' && student.currentBorrowing > 0) ||
+        (activeFilter === 'overdue' && (student.overdueCount > 0 || student.totalLate > 0)) ||
+        (activeFilter === 'locked' && status === 'locked') ||
+        (activeFilter === 'attention' && (student.trustScore < 66 || status === 'locked' || status === 'warning'));
+      return matchesSearch && matchesFilter;
     });
-  }, [rankFilter, searchText, statusFilter, students]);
+  }, [activeFilter, searchText, students]);
 
   const stats = useMemo(() => {
     const totalStudents = studentList?.totalItems ?? studentStats?.totalStudents ?? students.length;
-    const currentlyBorrowing = studentStats?.currentlyBorrowing ?? 0;
-    const lateStudents = students.filter((student) => student.totalLate > 0).length;
+    const currentlyBorrowing = students.some((student) => student.currentBorrowing > 0)
+      ? students.filter((student) => student.currentBorrowing > 0).length
+      : studentStats?.currentlyBorrowing ?? 0;
+    const lateStudents = students.filter((student) => student.overdueCount > 0 || student.totalLate > 0).length;
     const trustedStudents = students.filter((student) => student.trustRank === 'diamond' || student.trustRank === 'gold').length;
 
     return { totalStudents, currentlyBorrowing, lateStudents, trustedStudents };
   }, [studentList?.totalItems, studentStats?.currentlyBorrowing, studentStats?.totalStudents, students]);
 
-  const hasFilters = Boolean(searchText.trim()) || rankFilter !== 'all' || statusFilter !== 'all';
+  const rankCounts = useMemo(
+    () =>
+      RANK_ORDER.reduce<Record<StudentRank, number>>((counts, rank) => {
+        counts[rank] = students.filter((student) => student.trustRank === rank).length;
+        return counts;
+      }, { diamond: 0, gold: 0, silver: 0, bronze: 0, pebble: 0 }),
+    [students]
+  );
+
+  const hasFilters = Boolean(searchText.trim()) || activeFilter !== 'all';
 
   const clearFilters = () => {
     setSearchText('');
-    setRankFilter('all');
-    setStatusFilter('all');
+    setActiveFilter('all');
   };
 
   const syncSelectedStudent = (nextStudents: StudentRecord[], targetId: string) => {
@@ -356,58 +384,184 @@ export default function AdminStudentsPage() {
   };
 
   return (
-    <div style={{ paddingBottom: 48 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
+    <div className="admin-students-page">
+      <style>{`
+        .admin-students-page {
+          padding-bottom: 48px;
+          color: #1A1F1B;
+          font-family: var(--app-font);
+        }
+
+        .admin-students-page__header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          gap: 18px;
+          margin-bottom: 24px;
+          flex-wrap: wrap;
+        }
+
+        .admin-students-page__title {
+          margin: 0 0 8px;
+          font-family: var(--app-heading-font);
+          font-size: clamp(30px, 4vw, 42px);
+          font-weight: 760;
+          line-height: 1.12;
+          letter-spacing: 0;
+        }
+
+        .admin-students-page__title-accent {
+          color: #2D4A3E;
+          font-style: italic;
+        }
+
+        .admin-students-page__subtitle {
+          margin: 0;
+          color: #6B6F6C;
+          font-size: 15px;
+        }
+
+        .admin-students-page__rank-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+          gap: 12px;
+          margin-bottom: 22px;
+        }
+
+        .admin-students-page__rank-card {
+          min-height: 138px;
+          padding: 18px 16px;
+          text-align: center;
+          background: #FFFDF8;
+          border: 1px solid #E5DECB;
+          border-radius: 12px;
+          box-shadow: 0 14px 36px rgba(45, 74, 62, 0.05);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .admin-students-page__rank-count {
+          margin: 10px 0 4px;
+          font-family: var(--app-heading-font);
+          font-size: 34px;
+          font-weight: 800;
+          line-height: 1;
+        }
+
+        .admin-students-page__rank-meta {
+          color: #6B6F6C;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .admin-students-page__table-card {
+          border: 1px solid #E5DECB;
+          border-radius: 14px;
+          background: #FFFDF8;
+          box-shadow: 0 16px 42px rgba(45, 74, 62, 0.05);
+        }
+
+        .admin-students-page__filters {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 18px;
+        }
+
+        .admin-students-page__filter-scroll {
+          max-width: 100%;
+          overflow-x: auto;
+          padding-bottom: 2px;
+        }
+
+        .admin-students-page__student-cell {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 220px;
+        }
+
+        .admin-students-page__student-name {
+          font-weight: 800;
+          color: #1A1F1B;
+        }
+
+        .admin-students-page__student-code {
+          color: #8A8E88;
+          font-size: 12px;
+        }
+
+        .admin-students-page__borrow-meta {
+          color: #7B7F7A;
+          font-size: 12px;
+          margin-top: 3px;
+        }
+
+        @media (max-width: 640px) {
+          .admin-students-page__filters .ant-input-search {
+            width: 100% !important;
+          }
+        }
+      `}</style>
+
+      <div className="admin-students-page__header">
         <div>
-          <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 34, fontWeight: 500, margin: '0 0 8px', color: '#1A1F1B' }}>Quản lý sinh viên</h1>
-          <p style={{ color: '#6B6F6C', margin: 0 }}>Theo dõi điểm uy tín và lịch sử vi phạm từ dữ liệu hệ thống</p>
+          <h1 className="admin-students-page__title">
+            Quản lý <span className="admin-students-page__title-accent">tài khoản</span>
+          </h1>
+          <p className="admin-students-page__subtitle">{stats.totalStudents} sinh viên · Phân bố theo hạng uy tín</p>
         </div>
-        <Tooltip title="Chức năng chưa khả dụng">
-          <Button disabled>Xuất Excel</Button>
+        <Tooltip title="Chức năng này sẽ khả dụng khi hệ thống hỗ trợ.">
+          <span>
+            <Button icon={<DownloadOutlined />} disabled title="Chức năng này sẽ khả dụng khi hệ thống hỗ trợ.">
+              Xuất Excel
+            </Button>
+          </span>
         </Tooltip>
       </div>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-        <Col xs={24} sm={12} xl={6}><StatCard title="Tổng sinh viên" value={stats.totalStudents} meta="tài khoản đã đăng ký" /></Col>
-        <Col xs={24} sm={12} xl={6}><StatCard title="Đang mượn" value={stats.currentlyBorrowing} meta="đang mượn thiết bị" /></Col>
-        <Col xs={24} sm={12} xl={6}><StatCard title="Từng trễ hạn" value={stats.lateStudents} meta="theo hồ sơ sinh viên" danger={stats.lateStudents > 0} /></Col>
-        <Col xs={24} sm={12} xl={6}><StatCard title="Hạng vàng trở lên" value={stats.trustedStudents} meta="hạng uy tín cao" /></Col>
-      </Row>
+      <div className="admin-students-page__rank-grid">
+        {RANK_ORDER.map((rank) => {
+          const config = RANK_CONFIG[rank];
+          return (
+            <div className="admin-students-page__rank-card" style={{ borderColor: config.border }} key={rank}>
+              <RankTag rank={rank} />
+              <div className="admin-students-page__rank-count">{rankCounts[rank]}</div>
+              <div className="admin-students-page__rank-meta">
+                {config.range}đ · {config.caption}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-      <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-          <Input.Search allowClear placeholder="Tìm theo MSSV, tên, email..." value={searchText} onChange={(event) => setSearchText(event.target.value)} style={{ width: 320, maxWidth: '100%' }} />
-          <Select
-            value={rankFilter}
-            onChange={setRankFilter}
-            style={{ width: 170 }}
-            options={[
-              { value: 'all', label: 'Tất cả hạng' },
-              { value: 'diamond', label: 'Kim cương' },
-              { value: 'gold', label: 'Vàng' },
-              { value: 'silver', label: 'Bạc' },
-              { value: 'bronze', label: 'Đồng' },
-              { value: 'pebble', label: 'Đá cuội' }
-            ]}
+      <Card variant="borderless" className="admin-students-page__table-card" styles={{ body: { padding: 20 } }}>
+        <div className="admin-students-page__filters">
+          <Input.Search
+            allowClear
+            placeholder="Tìm theo tên, MSSV, email..."
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            style={{ width: 340, maxWidth: '100%' }}
           />
-          <Select
-            value={statusFilter}
-            onChange={setStatusFilter}
-            style={{ width: 170 }}
-            options={[
-              { value: 'all', label: 'Tất cả trạng thái' },
-              { value: 'active', label: 'Hoạt động' },
-              { value: 'locked', label: 'Bị khoá' },
-              { value: 'warning', label: 'Có cảnh báo' }
-            ]}
-          />
+          <div className="admin-students-page__filter-scroll">
+            <Segmented
+              options={FILTER_OPTIONS}
+              value={activeFilter}
+              onChange={(value) => setActiveFilter(value as StudentFilter)}
+            />
+          </div>
+          {hasFilters ? <Button onClick={clearFilters}>Xoá lọc</Button> : null}
         </div>
 
         <Table<StudentRecord>
           rowKey="id"
           loading={loading}
           dataSource={filteredStudents}
-          pagination={{ pageSize: 8 }}
+          pagination={{ pageSize: 8, showSizeChanger: false }}
           scroll={{ x: 'max-content' }}
           locale={{
             emptyText: <EmptyStudentState hasFilters={hasFilters && students.length > 0} onClearFilters={clearFilters} />
@@ -416,47 +570,52 @@ export default function AdminStudentsPage() {
             {
               title: 'Sinh viên',
               render: (_, student) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Avatar style={{ background: '#2D4A3E', color: '#F5EBD0' }}>{getInitials(student.fullName)}</Avatar>
+                <div className="admin-students-page__student-cell">
+                  <Avatar src={normalizeUploadUrl(student.avatarUrl)} style={{ background: '#2D4A3E', color: '#F5EBD0' }}>
+                    {getInitials(student.fullName)}
+                  </Avatar>
                   <div>
-                    <div style={{ fontWeight: 700 }}>{student.fullName}</div>
-                    <div style={{ color: '#9A9D98', fontSize: 12 }}>{student.studentCode}</div>
+                    <div className="admin-students-page__student-name">{student.fullName}</div>
+                    <div className="admin-students-page__student-code">{student.studentCode}</div>
                   </div>
                 </div>
               )
             },
-            { title: 'Email', render: (_, student) => student.email || <MutedValue>Chưa có dữ liệu</MutedValue> },
-            { title: 'Lớp', render: (_, student) => student.className || <MutedValue>Chưa có dữ liệu</MutedValue> },
+            { title: 'Email', render: (_, student) => student.email || <MutedValue>Chưa có email</MutedValue> },
+            { title: 'Lớp', render: (_, student) => student.className || <MutedValue>Chưa có lớp</MutedValue> },
+            {
+              title: 'Điểm uy tín',
+              render: (_, student) => (
+                <div style={{ minWidth: 118 }}>
+                  <Typography.Text strong>{student.trustScore}/100</Typography.Text>
+                  <Progress percent={Math.min(100, Math.max(0, student.trustScore))} size="small" showInfo={false} strokeColor="#2D4A3E" trailColor="#ECE8DA" />
+                </div>
+              )
+            },
             { title: 'Hạng', dataIndex: 'trustRank', render: (rank: StudentRank) => <RankTag rank={rank} /> },
             {
-              title: 'Điểm',
+              title: 'Lượt mượn',
               render: (_, student) => (
-                <div style={{ minWidth: 100 }}>
-                  <Typography.Text strong>{student.trustScore}</Typography.Text>
-                  <Progress percent={Math.min(100, Math.max(0, student.trustScore))} size="small" showInfo={false} strokeColor="#C99A3F" />
+                <div>
+                  <strong>{student.totalBorrowed}</strong> lượt
+                  {student.currentBorrowing > 0 ? <div className="admin-students-page__borrow-meta">Đang mượn {student.currentBorrowing}</div> : null}
                 </div>
               )
             },
             {
-              title: 'Trạng thái tài khoản',
+              title: 'Trạng thái',
               render: (_, student) => <StatusTag status={getStudentStatus(student)} />
             },
             {
-              title: 'Lịch sử',
-              render: (_, student) => (
-                <Tooltip title={`${student.totalBorrowed} lượt mượn / ${student.totalLate} lượt trễ`}>
-                  <Tag>{student.totalBorrowed} lượt</Tag>
-                </Tooltip>
-              )
-            },
-            {
-              title: 'Hành động',
+              title: 'Thao tác',
               align: 'right',
               render: (_, student) => (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                  <Button onClick={() => setDetailStudent(student)}>Chi tiết</Button>
+                  <Tooltip title="Xem chi tiết">
+                    <Button icon={<EyeOutlined />} onClick={() => setDetailStudent(student)} />
+                  </Tooltip>
                   <Dropdown menu={{ items: studentMenu(student) }} trigger={['click']}>
-                    <Button>...</Button>
+                    <Button icon={<MoreOutlined />} />
                   </Dropdown>
                 </div>
               )
@@ -466,7 +625,7 @@ export default function AdminStudentsPage() {
       </Card>
 
       <Modal
-        title="Chi tiết sinh viên"
+        title="Chi tiết tài khoản sinh viên"
         open={Boolean(detailStudent)}
         width={860}
         onCancel={() => setDetailStudent(undefined)}
@@ -478,10 +637,14 @@ export default function AdminStudentsPage() {
         {detailStudent && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-              <Avatar size={72} style={{ background: '#2D4A3E', color: '#F5EBD0', fontWeight: 700 }}>{getInitials(detailStudent.fullName)}</Avatar>
+              <Avatar size={72} src={normalizeUploadUrl(detailStudent.avatarUrl)} style={{ background: '#2D4A3E', color: '#F5EBD0', fontWeight: 700 }}>
+                {getInitials(detailStudent.fullName)}
+              </Avatar>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 700 }}>{detailStudent.fullName}</div>
-                <div style={{ color: '#6B6F6C' }}>{detailStudent.studentCode} · {detailStudent.email || 'Chưa có email'}</div>
+                <div style={{ color: '#6B6F6C' }}>
+                  {detailStudent.studentCode} · {detailStudent.email || 'Chưa có email'}
+                </div>
               </div>
             </div>
             <Tabs
@@ -494,16 +657,16 @@ export default function AdminStudentsPage() {
                       <Col xs={24} md={10}>
                         <Card style={{ background: '#2D4A3E', color: '#fff', borderRadius: 14 }}>
                           <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>HẠNG HIỆN TẠI</div>
-                          <div style={{ fontFamily: 'Georgia, serif', fontSize: 28, color: '#F5EBD0', marginTop: 8 }}>★ {RANK_CONFIG[detailStudent.trustRank].label}</div>
-                          <div style={{ fontFamily: 'Georgia, serif', fontSize: 48 }}>{detailStudent.trustScore}</div>
+                          <div style={{ fontFamily: 'var(--app-heading-font)', fontSize: 28, color: '#F5EBD0', marginTop: 8 }}>★ {RANK_CONFIG[detailStudent.trustRank].label}</div>
+                          <div style={{ fontFamily: 'var(--app-heading-font)', fontSize: 48 }}>{detailStudent.trustScore}</div>
                           <Progress percent={Math.min(100, Math.max(0, detailStudent.trustScore))} showInfo={false} strokeColor="#C99A3F" />
                         </Card>
                       </Col>
                       <Col xs={24} md={14}>
                         <Row gutter={[12, 12]}>
-                          <Col span={8}><StatCard title="Tổng mượn" value={detailStudent.totalBorrowed} meta="lượt" /></Col>
-                          <Col span={8}><StatCard title="Chuỗi tốt" value={detailStudent.goodReturnStreak} meta="lần" /></Col>
-                          <Col span={8}><StatCard title="Trễ" value={detailStudent.totalLate} meta="lượt" danger={detailStudent.totalLate > 0} /></Col>
+                          <Col xs={24} sm={8}><StatCard title="Tổng mượn" value={detailStudent.totalBorrowed} meta="lượt" /></Col>
+                          <Col xs={24} sm={8}><StatCard title="Chuỗi tốt" value={detailStudent.goodReturnStreak} meta="lần" /></Col>
+                          <Col xs={24} sm={8}><StatCard title="Trễ" value={detailStudent.totalLate} meta="lượt" danger={detailStudent.totalLate > 0} /></Col>
                         </Row>
                         <Card style={{ marginTop: 12 }}>
                           <div>SĐT: {detailStudent.phone || <MutedValue>Chưa có dữ liệu</MutedValue>}</div>
@@ -523,8 +686,8 @@ export default function AdminStudentsPage() {
                     <Empty
                       description={
                         <div>
-                          <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Chưa có dữ liệu lịch sử mượn từ hệ thống</h3>
-                          <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>Lịch sử mượn chi tiết của sinh viên sẽ hiển thị khi hệ thống cung cấp dữ liệu.</p>
+                          <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Chưa có lịch sử mượn.</h3>
+                          <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>Các lần mượn của sinh viên sẽ hiển thị tại đây khi có dữ liệu.</p>
                         </div>
                       }
                       style={{ padding: '44px 0' }}
@@ -541,7 +704,7 @@ export default function AdminStudentsPage() {
                       pagination={false}
                       dataSource={scoreLogs}
                       scroll={{ x: 'max-content' }}
-                      locale={{ emptyText: <Empty description="Chưa có dữ liệu lịch sử điểm từ hệ thống" /> }}
+                      locale={{ emptyText: <Empty description="Chưa có biến động điểm uy tín." /> }}
                       columns={[
                         { title: 'Thời gian', render: (_, log) => formatDateTime(log.createdAt) },
                         { title: 'Hành động', render: (_, log) => TRUST_REASON_LABEL[log.reason] ?? log.reason },

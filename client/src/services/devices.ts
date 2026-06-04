@@ -27,6 +27,9 @@ interface EquipmentResponse {
   availableQuantity?: number;
   borrowingQuantity?: number;
   brokenQuantity?: number;
+  damagedQuantity?: number;
+  damaged_quantity?: number;
+  broken_quantity?: number;
   conditionStatus?: string;
   status?: string;
   isActive?: boolean;
@@ -143,7 +146,7 @@ export function normalizeDevice(raw: EquipmentResponse): Device {
     totalQuantity: raw.totalQuantity ?? 0,
     availableQuantity: raw.availableQuantity ?? 0,
     borrowingQuantity: raw.borrowingQuantity ?? 0,
-    brokenQuantity: raw.brokenQuantity ?? 0,
+    brokenQuantity: raw.brokenQuantity ?? raw.broken_quantity ?? raw.damagedQuantity ?? raw.damaged_quantity ?? 0,
     conditionStatus: raw.conditionStatus,
     isActive: raw.isActive ?? true,
     status: getDeviceStatus(raw),

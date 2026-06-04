@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Col, Empty, Input, Row, Table, message } from 'antd';
+import { Button, Col, Empty, Form, Input, Modal, Row, Select, Space, Table, Typography, message } from 'antd';
 import { CheckCircleOutlined, ClockCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import StatusTag from '@/components/StatusTag';
 import { useAsyncData } from '@/hooks/useAsyncData';
@@ -10,6 +10,18 @@ import AdminEmptyState from '@/components/admin/AdminEmptyState';
 import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import AdminStatCard from '@/components/admin/AdminStatCard';
 import AdminTableCard from '@/components/admin/AdminTableCard';
+
+interface ReturnFormValues {
+  condition: string;
+  note?: string;
+}
+
+const RETURN_CONDITIONS = [
+  { value: 'perfect', label: 'Bình thường' },
+  { value: 'minor_damage', label: 'Hư hỏng nhẹ' },
+  { value: 'major_damage', label: 'Hư hỏng nặng' },
+  { value: 'lost', label: 'Mất thiết bị' }
+];
 
 function normalizeText(value?: string | null) {
   return String(value ?? '')
@@ -27,9 +39,21 @@ function renderDate(value?: string) {
   return formattedDate === 'Invalid Date' ? 'Chưa có dữ liệu' : formattedDate;
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    if (response?.data?.message) return response.data.message;
+  }
+
+  return fallback;
+}
+
 export default function AdminReturnsPage() {
+  const [returnForm] = Form.useForm<ReturnFormValues>();
   const { data: returnableRequests = [], loading, refresh } = useAsyncData(getReturnableBorrowRequests);
   const [searchText, setSearchText] = useState('');
+  const [returnTarget, setReturnTarget] = useState<NormalizedBorrowRequest>();
+  const [submitting, setSubmitting] = useState(false);
   const returningStatuses = new Set(['borrowing', 'overdue']);
   const borrowedRequests = returnableRequests.filter((item) => returningStatuses.has(item.status));
   const filteredRequests = useMemo(() => {
@@ -42,13 +66,32 @@ export default function AdminReturnsPage() {
   const borrowingCount = borrowedRequests.filter((item) => item.status === 'borrowing').length;
   const overdueCount = borrowedRequests.filter((item) => item.status === 'overdue').length;
 
-  const handleReturn = async (id: string) => {
+  const openReturnModal = (request: NormalizedBorrowRequest) => {
+    setReturnTarget(request);
+    returnForm.setFieldsValue({ condition: 'perfect', note: '' });
+  };
+
+  const closeReturnModal = () => {
+    setReturnTarget(undefined);
+    returnForm.resetFields();
+  };
+
+  const handleReturn = async (values: ReturnFormValues) => {
+    if (!returnTarget) return;
+
+    setSubmitting(true);
     try {
-      await markReturned(id, { returnCondition: 'perfect' });
+      await markReturned(returnTarget.id, {
+        returnCondition: values.condition,
+        damageNote: values.note?.trim() || undefined
+      });
       message.success('Đã ghi nhận trả thiết bị');
+      closeReturnModal();
       await refresh();
-    } catch {
-      message.error('Không thể ghi nhận trả thiết bị');
+    } catch (error) {
+      message.error(getErrorMessage(error, 'Không thể ghi nhận trả thiết bị'), 3);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -85,23 +128,52 @@ export default function AdminReturnsPage() {
           dataSource={filteredRequests}
           locale={{
             emptyText: borrowedRequests.length === 0 ? (
-              <AdminEmptyState title="Chưa có đơn cần ghi nhận trả" description="Các đơn đang mượn hoặc quá hạn sẽ xuất hiện tại đây." icon="✓" />
+              <AdminEmptyState title="Không có đơn nào cần ghi nhận trả." description="Các đơn đang mượn hoặc quá hạn sẽ xuất hiện tại đây." icon="✓" />
             ) : (
               <Empty description="Không tìm thấy đơn phù hợp" />
             )
           }}
-          scroll={{ x: 760 }}
+          scroll={{ x: 920 }}
           columns={[
-            { title: 'Mã đơn', dataIndex: 'requestCode' },
-            { title: 'Sinh viên', render: (_, record) => record.studentName || `Sinh viên #${record.studentId}` },
-            { title: 'Thiết bị', render: (_, record) => `${record.deviceName || `Thiết bị #${record.deviceId}`} × ${record.quantity}` },
-            { title: 'Ngày mượn', dataIndex: 'borrowDate', render: renderDate },
-            { title: 'Ngày trả dự kiến', dataIndex: 'returnDate', render: renderDate },
-            { title: 'Trạng thái', dataIndex: 'status', render: (status) => <StatusTag status={status} /> },
+            {
+              title: 'Mã đơn',
+              dataIndex: 'requestCode',
+              width: 140,
+              render: (value: string) => (
+                <Typography.Text strong title={value} style={{ whiteSpace: 'nowrap' }}>
+                  {value}
+                </Typography.Text>
+              )
+            },
+            {
+              title: 'Sinh viên',
+              width: 220,
+              render: (_, record) => (
+                <div>
+                  <Typography.Text strong>{record.studentName || `Sinh viên #${record.studentId}`}</Typography.Text>
+                  <div style={{ color: '#8A8E88', fontSize: 12 }}>{record.studentCode || 'Chưa có MSSV'}</div>
+                </div>
+              )
+            },
+            {
+              title: 'Thiết bị',
+              width: 240,
+              render: (_, record) => (
+                <div>
+                  <Typography.Text>{record.deviceName || `Thiết bị #${record.deviceId}`}</Typography.Text>
+                  <div style={{ color: '#8A8E88', fontSize: 12 }}>Số lượng: {record.quantity}</div>
+                </div>
+              )
+            },
+            { title: 'Ngày mượn', dataIndex: 'borrowDate', width: 140, render: renderDate },
+            { title: 'Ngày trả dự kiến', dataIndex: 'returnDate', width: 160, render: renderDate },
+            { title: 'Trạng thái', dataIndex: 'status', width: 130, render: (status) => <StatusTag status={status} /> },
             {
               title: 'Thao tác',
+              align: 'right',
+              width: 140,
               render: (_, record) => (
-                <Button type="primary" size="small" onClick={() => handleReturn(record.id)}>
+                <Button type="primary" size="small" onClick={() => openReturnModal(record)} style={{ background: '#2D4A3E', borderColor: '#2D4A3E' }}>
                   Ghi nhận trả
                 </Button>
               )
@@ -109,6 +181,39 @@ export default function AdminReturnsPage() {
           ]}
         />
       </AdminTableCard>
+
+      <Modal
+        title={returnTarget ? `Ghi nhận trả ${returnTarget.requestCode}` : 'Ghi nhận trả thiết bị'}
+        open={Boolean(returnTarget)}
+        onCancel={closeReturnModal}
+        onOk={() => returnForm.submit()}
+        confirmLoading={submitting}
+        okText="Xác nhận trả"
+        cancelText="Huỷ"
+        okButtonProps={{ style: { background: '#2D4A3E', borderColor: '#2D4A3E' } }}
+      >
+        {returnTarget ? (
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div style={{ border: '1px solid #E5DECB', borderRadius: 12, padding: 14, background: '#FFFDF8' }}>
+              <Space direction="vertical" size={4}>
+                <Typography.Text>Đơn: <strong>{returnTarget.requestCode}</strong></Typography.Text>
+                <Typography.Text>Sinh viên: <strong>{returnTarget.studentName}</strong></Typography.Text>
+                <Typography.Text>Thiết bị: <strong>{returnTarget.deviceName} × {returnTarget.quantity}</strong></Typography.Text>
+                <Typography.Text>Hạn trả: <strong>{renderDate(returnTarget.returnDate)}</strong></Typography.Text>
+              </Space>
+            </div>
+
+            <Form<ReturnFormValues> form={returnForm} layout="vertical" onFinish={handleReturn}>
+              <Form.Item name="condition" label="Tình trạng thiết bị" rules={[{ required: true, message: 'Chọn tình trạng thiết bị' }]}>
+                <Select options={RETURN_CONDITIONS} />
+              </Form.Item>
+              <Form.Item name="note" label="Ghi chú">
+                <Input.TextArea rows={3} placeholder="Ghi chú tình trạng thiết bị nếu cần..." />
+              </Form.Item>
+            </Form>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

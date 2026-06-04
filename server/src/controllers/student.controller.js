@@ -84,6 +84,18 @@ async function getTrustScoreLogs(req, res) {
   }
 }
 
+// Sinh viên xem lịch sử biến động điểm uy tín của chính mình
+async function getMyTrustScoreLogs(req, res) {
+  try {
+    const logs = await studentService.getMyTrustScoreLogsService(req.user.id);
+    return res.json({ message: 'Thành công', data: logs });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('getMyTrustScoreLogs error:', error.message);
+    return res.status(500).json({ message: 'Lỗi hệ thống khi tải lịch sử điểm' });
+  }
+}
+
 // Cập nhật ảnh đại diện cho sinh viên
 async function updateMyAvatar(req, res) {
   try {
@@ -112,5 +124,6 @@ module.exports = {
   toggleManualLock,
   getStudents,
   getTrustScoreLogs,
+  getMyTrustScoreLogs,
   updateMyAvatar, 
 };

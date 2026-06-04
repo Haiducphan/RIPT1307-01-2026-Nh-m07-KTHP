@@ -1,5 +1,7 @@
 const Student = require('../models/student.model');
+const User = require('../models/user.model');
 const TrustScoreLog = require('../models/trustScoreLog.model');
+const BorrowRequest = require('../models/borrowRequest.model');
 const { calculateRank } = require('../utils/trustScore.util');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
@@ -148,12 +150,23 @@ async function getStudentsService({ page = 1, limit = 10, search = '' }) {
   if (search) {
     whereClause[Op.or] = [
       { fullName: { [Op.like]: `%${search}%` } },
-      { studentCode: { [Op.like]: `%${search}%` } }
+      { studentCode: { [Op.like]: `%${search}%` } },
+      { '$user.email$': { [Op.like]: `%${search}%` } }
     ];
   }
 
   const { count, rows } = await Student.findAndCountAll({
     where: whereClause,
+    distinct: true,
+    subQuery: false,
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['id', 'email', 'isActive'],
+        required: false
+      }
+    ],
     order: [
       ['trustScore', 'ASC'],
       ['created_at', 'DESC']
@@ -167,7 +180,16 @@ async function getStudentsService({ page = 1, limit = 10, search = '' }) {
     totalPages: Math.ceil(count / parsedLimit),
     currentPage: parsedPage,
     limit: parsedLimit,
-    data: rows
+    data: rows.map((student) => {
+      const plainStudent = student.get({ plain: true });
+      const userEmail = plainStudent.user?.email || null;
+
+      return {
+        ...plainStudent,
+        email: userEmail,
+        userEmail
+      };
+    })
   };
 }
 
@@ -178,8 +200,17 @@ async function getTrustScoreLogsService(studentId) {
 
   return await TrustScoreLog.findAll({
     where: { studentId },
+    include: [{ model: BorrowRequest, attributes: ['id', 'requestCode', 'status'], required: false }],
     order: [['created_at', 'DESC']]
   });
+}
+
+// Lấy lịch sử biến động điểm uy tín của sinh viên đang đăng nhập
+async function getMyTrustScoreLogsService(userId) {
+  const student = await Student.findOne({ where: { userId } });
+  if (!student) throw { status: 404, message: 'Không tìm thấy hồ sơ sinh viên' };
+
+  return getTrustScoreLogsService(student.id);
 }
 
 // Cập nhật Avatar cho sinh viên
@@ -201,5 +232,6 @@ module.exports = {
   applyRankDropPenalty,
   getStudentsService,
   getTrustScoreLogsService,
+  getMyTrustScoreLogsService,
   updateAvatarService,
 };

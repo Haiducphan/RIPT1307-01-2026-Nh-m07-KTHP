@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import { history } from 'umi';
 import { cancelBorrowRequest, getMyBorrowRequests } from '@/services/borrowRequests';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { ROUTES } from '@/constants/routes';
 import type { BorrowRequest } from '@/types';
 
 type RequestStatus = BorrowRequest['status'];
@@ -26,6 +27,7 @@ const STATUS_CONFIG: Record<RequestStatus, { label: string; color: string; bg: s
   returned_ontime: { label: 'Đã trả', color: '#2F6F3E', bg: '#E1EFE3', dot: '#4F8B5F' },
   returned_late: { label: 'Đã trả trễ', color: '#8B6A1F', bg: '#F5EBD0', dot: '#C99A3F' },
   cancelled: { label: 'Đã huỷ', color: '#6B6F6C', bg: '#ECEEF2', dot: '#9A9D98' },
+  canceled: { label: 'Đã huỷ', color: '#6B6F6C', bg: '#ECEEF2', dot: '#9A9D98' },
   cancelled_noshow: { label: 'Đã huỷ', color: '#6B6F6C', bg: '#ECEEF2', dot: '#9A9D98' },
   rejected: { label: 'Đã từ chối', color: '#9B3E33', bg: '#F2DDD7', dot: '#B05A4D' },
   overdue: { label: 'Quá hạn', color: '#9B3E33', bg: '#F2DDD7', dot: '#B05A4D' }
@@ -34,7 +36,12 @@ const STATUS_CONFIG: Record<RequestStatus, { label: string; color: string; bg: s
 const PROCESSING_STATUSES: RequestStatus[] = ['pending', 'approved'];
 const BORROWING_STATUSES: RequestStatus[] = ['borrowed', 'borrowing', 'overdue'];
 const RETURNED_STATUSES: RequestStatus[] = ['returned', 'returned_ontime', 'returned_late'];
-const COMPLETED_STATUSES: RequestStatus[] = [...RETURNED_STATUSES, 'cancelled', 'cancelled_noshow', 'rejected'];
+const COMPLETED_STATUSES: RequestStatus[] = [...RETURNED_STATUSES, 'cancelled', 'canceled', 'cancelled_noshow', 'rejected'];
+
+function getRequestIdQuery() {
+  if (typeof window === 'undefined') return undefined;
+  return new URLSearchParams(window.location.search).get('requestId') || undefined;
+}
 
 function normalizeText(value?: string | null) {
   return String(value ?? '')
@@ -197,7 +204,8 @@ export default function StudentRequestsPage() {
   const { data, loading, refresh } = useAsyncData(getMyBorrowRequests);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [activeTab, setActiveTab] = useState<RequestTab>('all');
-  const [selectedId, setSelectedId] = useState<string>();
+  const [selectedId, setSelectedId] = useState<string | undefined>(() => getRequestIdQuery());
+  const [highlightedRequestId, setHighlightedRequestId] = useState<string | undefined>(() => getRequestIdQuery());
   const [cancelTarget, setCancelTarget] = useState<RequestItem>();
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -223,10 +231,23 @@ export default function StudentRequestsPage() {
     });
     setRequests(nextRequests);
     setSelectedId((currentId) => {
+      const highlightedRequest = highlightedRequestId
+        ? nextRequests.find((request) => String(request.id) === highlightedRequestId)
+        : undefined;
+      if (highlightedRequest) return highlightedRequest.id;
       if (currentId && nextRequests.some((request) => request.id === currentId)) return currentId;
       return nextRequests[0]?.id;
     });
-  }, [data]);
+  }, [data, highlightedRequestId]);
+
+  useEffect(() => {
+    const syncQueryState = () => {
+      setHighlightedRequestId(getRequestIdQuery());
+    };
+
+    const unlisten = history.listen(syncQueryState);
+    return unlisten;
+  }, []);
 
   const counts = useMemo(
     () => ({
@@ -304,7 +325,7 @@ export default function StudentRequestsPage() {
       <div style={{ marginBottom: 24 }}>
         <h1
           style={{
-            fontFamily: 'Georgia, serif',
+            fontFamily: 'var(--app-heading-font)',
             fontSize: 34,
             fontWeight: 500,
             lineHeight: 1.1,
@@ -361,7 +382,7 @@ export default function StudentRequestsPage() {
           }
           style={{ padding: '76px 0' }}
         >
-          <Button type="primary" onClick={() => history.push('/student/devices')}>
+          <Button type="primary" onClick={() => history.push(ROUTES.studentDevices)}>
             Xem danh sách thiết bị
           </Button>
         </Empty>
@@ -483,7 +504,7 @@ export default function StudentRequestsPage() {
                   }}
                   title={
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                      <span style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 500 }}>
+                      <span style={{ fontFamily: 'var(--app-heading-font)', fontSize: 20, fontWeight: 500 }}>
                         Chi tiết đơn {getRequestCode(selectedRequest, true)}
                       </span>
                       <StatusBadge status={selectedRequest.status} />
@@ -516,7 +537,7 @@ export default function StudentRequestsPage() {
         title={
           selectedRequest ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingRight: 24 }}>
-              <span style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 500 }}>
+              <span style={{ fontFamily: 'var(--app-heading-font)', fontSize: 20, fontWeight: 500 }}>
                 Chi tiết đơn {getRequestCode(selectedRequest, true)}
               </span>
               <StatusBadge status={selectedRequest.status} />

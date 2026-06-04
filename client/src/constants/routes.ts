@@ -4,6 +4,7 @@ export const ROUTES = {
   studentBorrow: '/student/borrow',
   studentNotifications: '/student/notifications',
   studentRequests: '/student/requests',
+  studentProfile: '/student/profile',
   studentTrustRules: '/student/trust-rules',
   adminDashboard: '/admin/dashboard',
   adminRequests: '/admin/requests',

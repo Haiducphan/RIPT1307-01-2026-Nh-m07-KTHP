@@ -9,6 +9,7 @@ export interface NotificationItem {
   content: string;
   isRead: boolean;
   category: NotificationCategory;
+  relatedRequestId?: string;
   createdAt?: string;
   readAt?: string;
 }
@@ -59,6 +60,19 @@ function getCategory(type: string): NotificationCategory {
 function normalizeNotification(raw: unknown): NotificationItem {
   const record = asRecord(raw);
   const type = toStringValue(record.type) ?? 'system_announcement';
+  const metadata = asRecord(record.metadata);
+  const relatedRequestId = toStringValue(
+    record.requestId ??
+      record.request_id ??
+      record.borrowRequestId ??
+      record.borrow_request_id ??
+      record.relatedRequestId ??
+      record.related_request_id ??
+      metadata.requestId ??
+      metadata.request_id ??
+      metadata.borrowRequestId ??
+      metadata.borrow_request_id
+  );
 
   return {
     id: String(record.id ?? ''),
@@ -67,6 +81,7 @@ function normalizeNotification(raw: unknown): NotificationItem {
     content: toStringValue(record.message ?? record.content) ?? '',
     isRead: toBooleanValue(record.isRead ?? record.is_read),
     category: getCategory(type),
+    relatedRequestId,
     createdAt: toStringValue(record.createdAt ?? record.created_at),
     readAt: toStringValue(record.readAt ?? record.read_at)
   };

@@ -35,7 +35,7 @@ export default function AdminStatCard({ title, value, meta, icon, accent = '#2D4
           </div>
         ) : null}
       </div>
-      <div style={{ fontFamily: 'Georgia, serif', fontSize: 34, lineHeight: 1.1, color: textColor, marginTop: 12 }}>
+      <div style={{ fontFamily: 'var(--app-heading-font)', fontSize: 34, lineHeight: 1.1, color: textColor, marginTop: 12 }}>
         {typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
       </div>
       {meta ? <div style={{ color: mutedColor, fontSize: 12, marginTop: 6 }}>{meta}</div> : null}

@@ -11,6 +11,15 @@ interface LoginFormValues {
   role: UserRole;
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    if (response?.data?.message) return response.data.message;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function LoginPage() {
   const [form] = Form.useForm<LoginFormValues>();
   const signIn = useAuthStore((state) => state.signIn);
@@ -23,8 +32,8 @@ export default function LoginPage() {
       const syncedUser = { ...latestUser, token: user.token };
       signIn(syncedUser);
       history.push(syncedUser.role === 'admin' ? ROUTES.adminDashboard : ROUTES.studentDevices);
-    } catch {
-      message.error('Đăng nhập thất bại');
+    } catch (error) {
+      message.error(getErrorMessage(error, 'Không thể đăng nhập. Vui lòng kiểm tra lại thông tin.'), 3);
     }
   };
 
@@ -78,7 +87,7 @@ export default function LoginPage() {
                 display: 'grid',
                 placeItems: 'center',
                 color: '#F5EBD0',
-                fontFamily: 'Georgia, serif',
+                fontFamily: 'var(--app-heading-font)',
                 fontSize: 34,
                 fontStyle: 'italic',
                 fontWeight: 700
@@ -91,7 +100,7 @@ export default function LoginPage() {
               <Typography.Title
                 level={1}
                 style={{
-                  fontFamily: 'Georgia, serif',
+                  fontFamily: 'var(--app-heading-font)',
                   fontSize: 68,
                   lineHeight: 1.08,
                   fontWeight: 500,
@@ -136,7 +145,7 @@ export default function LoginPage() {
               <Typography.Title
                 level={1}
                 style={{
-                  fontFamily: 'Georgia, serif',
+                  fontFamily: 'var(--app-heading-font)',
                   fontSize: 48,
                   lineHeight: 1.1,
                   fontWeight: 600,
@@ -148,7 +157,7 @@ export default function LoginPage() {
                 Chào mừng trở lại
               </Typography.Title>
               <Typography.Text style={{ color: '#7B7F7A', fontSize: 22 }}>
-                Đăng nhập bằng tài khoản CLB
+                Đăng nhập bằng tài khoản sinh viên hoặc quản trị viên.
               </Typography.Text>
             </div>
 
@@ -165,13 +174,13 @@ export default function LoginPage() {
 
               <Form.Item
                 name="email"
-                label={<span style={{ fontSize: 18, fontWeight: 700, color: '#1A1F1B' }}>Email</span>}
-                rules={[{ required: true }]}
+                label={<span style={{ fontSize: 18, fontWeight: 700, color: '#1A1F1B' }}>Mã sinh viên / Email</span>}
+                rules={[{ required: true, whitespace: true, message: 'Nhập mã sinh viên hoặc email' }]}
                 style={{ marginBottom: 28 }}
               >
                 <Input
                   size="large"
-                  placeholder="Nhập email"
+                  placeholder="Nhập mã sinh viên hoặc email"
                   style={{ height: 58, borderRadius: 12, borderColor: '#E5DECB', fontSize: 20, paddingInline: 20 }}
                 />
               </Form.Item>

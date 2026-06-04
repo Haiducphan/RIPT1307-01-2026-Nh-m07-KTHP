@@ -78,7 +78,7 @@ export default function EquipmentCard({ device, onBorrow }: EquipmentCardProps) 
             placeItems: 'center',
             fontSize: 12,
             fontWeight: 700,
-            fontFamily: 'Georgia, serif',
+            fontFamily: 'var(--app-heading-font)',
             color: tierConfig.color,
             border: `1px solid ${tierConfig.color}22`
           }}

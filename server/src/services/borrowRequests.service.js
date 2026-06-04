@@ -5,11 +5,21 @@ const BorrowRequest = require('../models/borrowRequest.model');
 const Equipment = require('../models/equipment.model');
 const Student = require('../models/student.model'); 
 const User = require('../models/user.model');
+const SystemSetting = require('../models/systemSetting.model');
 const sequelize = require('../config/database');
 const emailService = require('./email.service');
 const notificationService = require('./notification.service');
 const auditLogService = require('./auditLog.service');
 
+function clampScore(score) {
+  return Math.max(0, Math.min(100, score));
+}
+
+async function getSettingNumber(settingKey, fallback, transaction) {
+  const setting = await SystemSetting.findOne({ where: { settingKey }, transaction });
+  const parsed = Number(setting?.settingValue);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 // Lấy danh sách toàn bộ đơn mượn kèm phân trang & bộ lọc trạng thái (Dành cho Admin)
 async function getBorrowRequests({ page = 1, limit = 10, status }) {
@@ -321,6 +331,9 @@ async function returnRequest(requestId, adminId, returnCondition, damageNote) {
     today.setHours(0, 0, 0, 0);
     const expectedReturnDate = new Date(request.returnDate);
     const isOntime = today <= expectedReturnDate && request.status !== 'overdue';
+    const lateDays = isOntime
+      ? 0
+      : Math.max(1, Math.ceil((today.getTime() - expectedReturnDate.getTime()) / (1000 * 60 * 60 * 24)));
 
     if (returnCondition === 'minor_damage') {
       baseScoreDelta = -10; baseReason = 'minor_damage'; newStreak = 0;
@@ -332,9 +345,9 @@ async function returnRequest(requestId, adminId, returnCondition, damageNote) {
       newStreak = 0;
     }
 
-    let tempScore = student.trustScore + baseScoreDelta;
-    if (tempScore > 100) tempScore = 100;
-    if (tempScore < 0) tempScore = 0;
+    let scoreCursor = student.trustScore;
+    let rankCursor = student.trustRank;
+    let tempScore = clampScore(scoreCursor + baseScoreDelta);
     let tempRank = calculateRank(tempScore);
 
     if (baseScoreDelta !== 0) {
@@ -342,14 +355,42 @@ async function returnRequest(requestId, adminId, returnCondition, damageNote) {
         studentId: student.id,
         borrowRequestId: request.id,
         delta: baseScoreDelta,
-        scoreBefore: student.trustScore,
+        scoreBefore: scoreCursor,
         scoreAfter: tempScore,
-        rankBefore: student.trustRank,
+        rankBefore: rankCursor,
         rankAfter: tempRank,
         reason: baseReason,
         note: damageNote,
         createdBy: adminId
       }, { transaction });
+    }
+
+    scoreCursor = tempScore;
+    rankCursor = tempRank;
+
+    // Nếu admin ghi nhận trả trễ trước khi cron kịp đổi đơn sang overdue, vẫn phải trừ điểm và ghi log.
+    const latePenaltyPerDay = await getSettingNumber('late_penalty_per_day', 3, transaction);
+    const lateScoreDelta = !isOntime && request.status !== 'overdue' ? -latePenaltyPerDay * lateDays : 0;
+
+    if (lateScoreDelta !== 0) {
+      tempScore = clampScore(scoreCursor + lateScoreDelta);
+      tempRank = calculateRank(tempScore);
+
+      await TrustScoreLog.create({
+        studentId: student.id,
+        borrowRequestId: request.id,
+        delta: lateScoreDelta,
+        scoreBefore: scoreCursor,
+        scoreAfter: tempScore,
+        rankBefore: rankCursor,
+        rankAfter: tempRank,
+        reason: 'late_return',
+        note: `Trả trễ ${lateDays} ngày`,
+        createdBy: adminId
+      }, { transaction });
+
+      scoreCursor = tempScore;
+      rankCursor = tempRank;
     }
 
     // Tính điểm thưởng chuỗi
@@ -358,9 +399,7 @@ async function returnRequest(requestId, adminId, returnCondition, damageNote) {
     if (newStreak === 3) { streakDelta = 5; streakReason = 'streak_3'; }
     if (newStreak === 5) { streakDelta = 7; streakReason = 'streak_5'; }
 
-    let finalScore = tempScore + streakDelta;
-    if (finalScore > 100) finalScore = 100;
-    if (finalScore < 0) finalScore = 0;
+    let finalScore = clampScore(scoreCursor + streakDelta);
     let finalRank = calculateRank(finalScore);
 
     if (streakDelta !== 0) {
@@ -368,9 +407,9 @@ async function returnRequest(requestId, adminId, returnCondition, damageNote) {
         studentId: student.id,
         borrowRequestId: request.id, 
         delta: streakDelta,
-        scoreBefore: tempScore,
+        scoreBefore: scoreCursor,
         scoreAfter: finalScore,
-        rankBefore: tempRank,
+        rankBefore: rankCursor,
         rankAfter: finalRank,
         reason: streakReason,
         note: `Thưởng đạt chuỗi ${newStreak} lần trả đồ hoàn hảo`,
@@ -393,7 +432,8 @@ async function returnRequest(requestId, adminId, returnCondition, damageNote) {
       returnCondition: returnCondition,
       returnCheckedBy: adminId,
       damageNote: damageNote,
-      trustScoreDelta: request.trustScoreDelta + baseScoreDelta + streakDelta
+      lateDays,
+      trustScoreDelta: request.trustScoreDelta + baseScoreDelta + lateScoreDelta + streakDelta
     }, { transaction });
 
     await transaction.commit();

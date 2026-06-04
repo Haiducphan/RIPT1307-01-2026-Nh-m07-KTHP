@@ -28,7 +28,7 @@ import { createDevice, deleteDevice, getDevices, toggleDeviceStatus, updateDevic
 import type { Device } from '@/types';
 
 type DeviceTier = 'S' | 'A' | 'B' | 'C';
-type StatusFilter = 'active' | 'inactive' | 'all';
+type DeviceFilter = 'all' | DeviceTier | 'broken' | 'inactive';
 
 interface AdminDevice extends Device {
   code: string;
@@ -39,7 +39,7 @@ interface AdminDevice extends Device {
 interface DeviceFormValues {
   name: string;
   code: string;
-  categoryId: string;
+  categoryId: string | number;
   tier: DeviceTier;
   totalQuantity: number;
   availableQuantity: number;
@@ -59,6 +59,17 @@ const TIER_COLORS: Record<DeviceTier, { color: string; bg: string }> = {
   B: { color: '#355D8E', bg: '#DCE4F0' },
   C: { color: '#2F6F3E', bg: '#E1EFE3' }
 };
+
+const FILTER_LABELS: Record<DeviceFilter, string> = {
+  all: 'Tất cả',
+  S: 'Hạng S',
+  A: 'Hạng A',
+  B: 'Hạng B',
+  C: 'Hạng C',
+  broken: 'Hỏng',
+  inactive: 'Ngừng sử dụng'
+};
+
 function normalizeText(value: string) {
   return value
     .normalize('NFD')
@@ -66,6 +77,20 @@ function normalizeText(value: string) {
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D')
     .toLowerCase();
+}
+
+function getBorrowingQuantity(device: Pick<Device, 'borrowingQuantity' | 'totalQuantity' | 'availableQuantity' | 'brokenQuantity'>) {
+  return device.borrowingQuantity ?? Math.max(device.totalQuantity - device.availableQuantity - (device.brokenQuantity ?? 0), 0);
+}
+
+function getBrokenQuantity(device: Pick<Device, 'brokenQuantity' | 'conditionStatus' | 'status'>) {
+  const condition = normalizeText(device.conditionStatus ?? '');
+  if (device.brokenQuantity !== undefined) return device.brokenQuantity;
+  return condition.includes('broken') || condition.includes('damage') || device.status === 'maintenance' ? 1 : 0;
+}
+
+function isBrokenDevice(device: Device) {
+  return getBrokenQuantity(device) > 0;
 }
 
 function getDeviceIcon(device: Pick<Device, 'name' | 'category'>) {
@@ -193,7 +218,8 @@ function DeviceDetailModal({ device, open, onClose }: { device?: AdminDevice; op
             <Col xs={24} md={8}><InfoBox label="Trạng thái" value={device.active ? 'Đang hoạt động' : 'Đã dừng hoạt động'} /></Col>
             <Col xs={24} md={8}><InfoBox label="Tổng số lượng" value={String(device.totalQuantity)} /></Col>
             <Col xs={24} md={8}><InfoBox label="Còn sẵn" value={String(device.availableQuantity)} /></Col>
-            <Col xs={24} md={8}><InfoBox label="Đang mượn" value={String(device.borrowingQuantity ?? 0)} /></Col>
+            <Col xs={24} md={8}><InfoBox label="Đang mượn" value={String(getBorrowingQuantity(device))} /></Col>
+            <Col xs={24} md={8}><InfoBox label="Hỏng" value={String(getBrokenQuantity(device))} /></Col>
           </Row>
 
           <Card variant="borderless" style={{ border: '1px solid #E5DECB', borderRadius: 12 }}>
@@ -231,7 +257,7 @@ function StatCard({ title, value, meta, featured }: { title: string; value: numb
       <div style={{ color: featured ? 'rgba(255,255,255,0.72)' : '#6B6F6C', fontSize: 11, letterSpacing: 0, textTransform: 'uppercase' }}>
         {title}
       </div>
-      <div style={{ fontFamily: 'Georgia, serif', fontSize: 34, color: featured ? '#FFFFFF' : '#1A1F1B', marginTop: 8 }}>
+      <div style={{ fontFamily: 'var(--app-heading-font)', fontSize: 34, color: featured ? '#FFFFFF' : '#1A1F1B', marginTop: 8 }}>
         {value.toLocaleString('vi-VN')}
       </div>
       <div style={{ color: featured ? 'rgba(255,255,255,0.72)' : '#6B6F6C', fontSize: 12 }}>{meta}</div>
@@ -268,9 +294,7 @@ export default function AdminDevicesPage() {
   const { data: categories = [], loading: categoriesLoading, refresh: refreshCategories } = useAsyncData(getCategories);
   const [devices, setDevices] = useState<AdminDevice[]>([]);
   const [searchText, setSearchText] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [tierFilter, setTierFilter] = useState<DeviceTier | 'all'>('all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
+  const [deviceFilter, setDeviceFilter] = useState<DeviceFilter>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<AdminDevice>();
   const [detailDevice, setDetailDevice] = useState<AdminDevice>();
@@ -286,36 +310,49 @@ export default function AdminDevicesPage() {
   const activeDevices = useMemo(() => devices.filter((device) => device.active), [devices]);
 
   const stats = useMemo(() => {
-    const borrowed = activeDevices.reduce(
-      (total, device) => total + (device.borrowingQuantity ?? Math.max(device.totalQuantity - device.availableQuantity - (device.brokenQuantity ?? 0), 0)),
-      0
-    );
+    const totalQuantity = activeDevices.reduce((total, device) => total + device.totalQuantity, 0);
+    const borrowed = activeDevices.reduce((total, device) => total + getBorrowingQuantity(device), 0);
     return {
       totalTypes: activeDevices.length,
+      totalQuantity,
       borrowed,
       lowStock: activeDevices.filter((device) => device.availableQuantity <= 2 && device.availableQuantity > 0).length,
-      active: activeDevices.length
+      active: activeDevices.length,
+      broken: activeDevices.reduce((total, device) => total + getBrokenQuantity(device), 0)
     };
   }, [activeDevices]);
 
+  const filterCounts = useMemo<Record<DeviceFilter, number>>(
+    () => ({
+      all: activeDevices.length,
+      S: activeDevices.filter((device) => device.tier === 'S').length,
+      A: activeDevices.filter((device) => device.tier === 'A').length,
+      B: activeDevices.filter((device) => device.tier === 'B').length,
+      C: activeDevices.filter((device) => device.tier === 'C').length,
+      broken: activeDevices.filter(isBrokenDevice).length,
+      inactive: devices.filter((device) => !device.active).length
+    }),
+    [activeDevices, devices]
+  );
+
   const filteredDevices = useMemo(() => {
     const keyword = normalizeText(searchText.trim());
-    const devicesByStatus =
-      statusFilter === 'active'
-        ? activeDevices
-        : statusFilter === 'inactive'
-          ? devices.filter((device) => !device.active)
-          : devices;
+    const devicesByFilter =
+      deviceFilter === 'inactive'
+        ? devices.filter((device) => !device.active)
+        : deviceFilter === 'broken'
+          ? activeDevices.filter(isBrokenDevice)
+          : deviceFilter === 'all'
+            ? activeDevices
+            : activeDevices.filter((device) => device.tier === deviceFilter);
 
-    return devicesByStatus.filter((device) => {
+    return devicesByFilter.filter((device) => {
       const matchesSearch =
         !keyword ||
         normalizeText(`${device.name} ${device.code} ${device.category} ${device.description ?? ''}`).includes(keyword);
-      const matchesCategory = categoryFilter === 'all' || String(device.categoryId ?? '') === categoryFilter;
-      const matchesTier = tierFilter === 'all' || device.tier === tierFilter;
-      return matchesSearch && matchesCategory && matchesTier;
+      return matchesSearch;
     });
-  }, [activeDevices, categoryFilter, devices, searchText, statusFilter, tierFilter]);
+  }, [activeDevices, deviceFilter, devices, searchText]);
 
   const categoryOptions = useMemo(
     () => categories.map((category) => ({ value: category.id, label: category.name })),
@@ -406,6 +443,7 @@ export default function AdminDevicesPage() {
       categoryId,
       tier: values.tier,
       totalQuantity: values.totalQuantity,
+      availableQuantity: values.availableQuantity,
       description: values.description?.trim(),
       conditionStatus: 'good',
       images: getSelectedFiles(values.images),
@@ -441,19 +479,19 @@ export default function AdminDevicesPage() {
 
   const handleDelete = (device: AdminDevice) => {
     Modal.confirm({
-      title: 'Xác nhận xoá thiết bị',
-      content: 'Bạn có chắc muốn xoá thiết bị này? Hành động không thể hoàn tác.',
-      okText: 'Đồng ý xoá',
+      title: 'Ngừng sử dụng thiết bị',
+      content: 'Thiết bị sẽ được ẩn khỏi danh sách đang quản lý và sinh viên sẽ không thấy thiết bị này để đăng ký mượn.',
+      okText: 'Ngừng sử dụng',
       cancelText: 'Huỷ',
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await deleteDevice(device.id);
           await refresh();
-          message.success('Đã xoá', 2);
+          message.success('Đã ngừng sử dụng thiết bị', 2);
         } catch (error) {
           console.error('Delete device failed:', error);
-          message.error(getErrorMessage(error, 'Không thể xoá thiết bị. Vui lòng thử lại.'), 3);
+          message.error(getErrorMessage(error, 'Không thể ngừng sử dụng thiết bị. Vui lòng thử lại.'), 3);
         }
       }
     });
@@ -475,16 +513,47 @@ export default function AdminDevicesPage() {
 
   return (
     <div style={{ paddingBottom: 48 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 34, fontWeight: 500, margin: '0 0 8px', color: '#1A1F1B' }}>
-            Quản lý kho thiết bị
+      <style>
+        {`
+          .admin-device-row-inactive > td {
+            background: #FAF8F1 !important;
+          }
+          .admin-device-row-inactive td {
+            color: rgba(26, 31, 27, 0.72);
+          }
+        `}
+      </style>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          gap: 16,
+          marginBottom: 24,
+          flexWrap: 'wrap'
+        }}
+      >
+        <div style={{ minWidth: 260 }}>
+          <h1 style={{ fontFamily: 'var(--app-heading-font)', fontSize: 34, fontWeight: 600, margin: '0 0 8px', color: '#1A1F1B' }}>
+            Quản lý thiết bị
           </h1>
-          <p style={{ color: '#6B6F6C', margin: 0 }}>Thêm, sửa, xoá thiết bị và quản lý số lượng tồn kho</p>
+          <p style={{ color: '#6B6F6C', margin: 0 }}>
+            {stats.totalTypes.toLocaleString('vi-VN')} loại · {stats.totalQuantity.toLocaleString('vi-VN')} thiết bị ·{' '}
+            {stats.borrowed.toLocaleString('vi-VN')} đang cho mượn
+          </p>
         </div>
-        <Button type="primary" onClick={openAddModal} style={{ background: '#2D4A3E', borderColor: '#2D4A3E' }}>
-          + Thêm thiết bị
-        </Button>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Tooltip title="Chức năng nhập danh sách sẽ khả dụng khi hệ thống hỗ trợ.">
+            <span>
+              <Button disabled title="Chức năng nhập danh sách sẽ khả dụng khi hệ thống hỗ trợ.">
+                Nhập từ Excel
+              </Button>
+            </span>
+          </Tooltip>
+          <Button type="primary" onClick={openAddModal} style={{ background: '#2D4A3E', borderColor: '#2D4A3E' }}>
+            + Thêm thiết bị
+          </Button>
+        </div>
       </div>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
@@ -503,37 +572,36 @@ export default function AdminDevicesPage() {
       </Row>
 
       <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB' }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
+        <div style={{ display: 'grid', gap: 14, marginBottom: 18 }}>
           <Input.Search
             allowClear
-            placeholder="Tìm thiết bị..."
+            placeholder="Tìm theo tên, mã hoặc danh mục..."
             value={searchText}
             onChange={(event) => setSearchText(event.target.value)}
-            style={{ width: 300, maxWidth: '100%' }}
+            style={{ width: 360, maxWidth: '100%' }}
           />
-          <Select
-            value={categoryFilter}
-            onChange={setCategoryFilter}
-            style={{ width: 180 }}
-            loading={categoriesLoading}
-            options={[{ value: 'all', label: 'Tất cả loại' }, ...categoryOptions]}
-          />
-          <Select
-            value={tierFilter}
-            onChange={setTierFilter}
-            style={{ width: 150 }}
-            options={[{ value: 'all', label: 'Tất cả hạng' }, ...TIER_OPTIONS.map((tier) => ({ value: tier, label: tier }))]}
-          />
-          <Select
-            value={statusFilter}
-            onChange={setStatusFilter}
-            style={{ width: 170 }}
-            options={[
-              { value: 'active', label: 'Đang hoạt động' },
-              { value: 'inactive', label: 'Đã ngừng hoạt động' },
-              { value: 'all', label: 'Tất cả trạng thái' }
-            ]}
-          />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {(['all', 'S', 'A', 'B', 'C', 'broken', 'inactive'] as DeviceFilter[]).map((filter) => {
+              const active = deviceFilter === filter;
+              return (
+                <Button
+                  key={filter}
+                  size="small"
+                  type={active ? 'primary' : 'default'}
+                  onClick={() => setDeviceFilter(filter)}
+                  style={{
+                    borderRadius: 999,
+                    borderColor: active ? '#2D4A3E' : '#E5DECB',
+                    background: active ? '#2D4A3E' : '#FFFFFF',
+                    color: active ? '#FFFFFF' : '#3E453F',
+                    fontWeight: active ? 700 : 500
+                  }}
+                >
+                  {FILTER_LABELS[filter]} ({filterCounts[filter].toLocaleString('vi-VN')})
+                </Button>
+              );
+            })}
+          </div>
         </div>
 
         <Table<AdminDevice>
@@ -541,9 +609,10 @@ export default function AdminDevicesPage() {
           loading={{ spinning: loading, tip: 'Đang tải thiết bị...' }}
           dataSource={filteredDevices}
           pagination={{ pageSize: 8 }}
-          scroll={{ x: 'max-content' }}
+          scroll={{ x: 1180 }}
+          rowClassName={(device) => (device.active ? '' : 'admin-device-row-inactive')}
           locale={{
-            emptyText: activeDevices.length === 0 && statusFilter === 'active' ? (
+            emptyText: activeDevices.length === 0 && deviceFilter !== 'inactive' ? (
               <Empty
                 image={<div style={{ fontSize: 80 }}>📦</div>}
                 styles={{ image: { height: 96, marginBottom: 16 } }}
@@ -580,24 +649,46 @@ export default function AdminDevicesPage() {
           columns={[
             {
               title: 'Tên thiết bị',
+              width: 320,
               render: (_, device) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                   <DeviceThumbnail device={device} />
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#1A1F1B' }}>{device.name}</div>
-                    <div style={{ color: '#9A9D98', fontSize: 12 }}>{device.code}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <Tooltip title={device.name}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          color: '#1A1F1B',
+                          maxWidth: 220,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {device.name}
+                      </div>
+                    </Tooltip>
+                    <div
+                      title={device.code}
+                      style={{
+                        color: '#8A8E88',
+                        fontSize: 12,
+                        maxWidth: 220,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {device.code} · {device.category}
+                    </div>
                   </div>
                 </div>
               )
             },
             {
-              title: 'Loại',
-              dataIndex: 'category',
-              render: (category: string) => <Tag color="default">{category}</Tag>
-            },
-            {
               title: 'Hạng',
               dataIndex: 'tier',
+              width: 90,
               render: (tier: DeviceTier) => (
                 <Tag style={{ border: 'none', color: TIER_COLORS[tier].color, background: TIER_COLORS[tier].bg, fontWeight: 700 }}>
                   {tier}
@@ -605,18 +696,40 @@ export default function AdminDevicesPage() {
               )
             },
             {
-              title: 'Số lượng',
+              title: 'Tổng',
+              width: 90,
+              align: 'right',
+              render: (_, device) => <strong>{device.totalQuantity.toLocaleString('vi-VN')}</strong>
+            },
+            {
+              title: 'Đang sẵn',
+              width: 110,
+              align: 'right',
               render: (_, device) => (
-                <div>
-                  <div>
-                    Còn <strong>{device.availableQuantity}</strong> / Tổng {device.totalQuantity}
-                  </div>
-                  {device.availableQuantity <= 2 && device.availableQuantity > 0 && <Badge color="#B05A4D" text="Sắp hết" />}
-                </div>
+                <span style={{ color: device.availableQuantity <= 2 && device.availableQuantity > 0 ? '#B05A4D' : '#1A1F1B', fontWeight: 700 }}>
+                  {device.availableQuantity.toLocaleString('vi-VN')}
+                </span>
               )
             },
             {
-              title: 'Tình trạng',
+              title: 'Đang cho mượn',
+              width: 140,
+              align: 'right',
+              render: (_, device) => getBorrowingQuantity(device).toLocaleString('vi-VN')
+            },
+            {
+              title: 'Hỏng',
+              width: 90,
+              align: 'right',
+              render: (_, device) => (
+                <span style={{ color: getBrokenQuantity(device) > 0 ? '#B05A4D' : '#6B6F6C', fontWeight: getBrokenQuantity(device) > 0 ? 700 : 500 }}>
+                  {getBrokenQuantity(device).toLocaleString('vi-VN')}
+                </span>
+              )
+            },
+            {
+              title: 'Trạng thái',
+              width: 170,
               render: (_, device) => (
                 <div style={{ display: 'grid', gap: 6, justifyItems: 'start' }}>
                   <Switch
@@ -631,10 +744,15 @@ export default function AdminDevicesPage() {
             {
               title: 'Hành động',
               align: 'right',
+              width: 230,
               render: (_, device) => (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                  <Button icon={<EditOutlined />} onClick={() => openEditModal(device)} />
-                  <Button icon={<EyeOutlined />} onClick={() => setDetailDevice(device)}>Xem chi tiết</Button>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, whiteSpace: 'nowrap' }}>
+                  <Tooltip title="Sửa thiết bị">
+                    <Button icon={<EditOutlined />} onClick={() => openEditModal(device)} />
+                  </Tooltip>
+                  <Button icon={<EyeOutlined />} onClick={() => setDetailDevice(device)}>
+                    Xem chi tiết
+                  </Button>
                   <Tooltip title={device.active ? 'Ẩn thiết bị khỏi danh sách đang quản lý' : 'Thiết bị đã dừng hoạt động'}>
                     <span>
                       <Button danger icon={<DeleteOutlined />} disabled={!device.active} onClick={() => handleDelete(device)} />
@@ -648,7 +766,7 @@ export default function AdminDevicesPage() {
       </Card>
 
       <Modal
-        title={editingDevice ? 'Chỉnh sửa thiết bị' : 'Thêm thiết bị mới'}
+        title={editingDevice ? 'Chỉnh sửa thiết bị' : 'Thêm thiết bị'}
         open={modalOpen}
         width={600}
         onCancel={closeModal}
@@ -716,7 +834,7 @@ export default function AdminDevicesPage() {
                   })
                 ]}
               >
-                <InputNumber min={0} disabled style={{ width: '100%' }} />
+                <InputNumber min={0} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
@@ -732,7 +850,13 @@ export default function AdminDevicesPage() {
             <Upload
               listType="picture-card"
               maxCount={5}
-              beforeUpload={() => false}
+              beforeUpload={(file) => {
+                if (!file.type.startsWith('image/')) {
+                  message.error('Vui lòng chọn file ảnh.', 3);
+                  return Upload.LIST_IGNORE;
+                }
+                return false;
+              }}
               accept="image/*"
               onRemove={(file) => {
                 const imageId = getUploadImageId(file);

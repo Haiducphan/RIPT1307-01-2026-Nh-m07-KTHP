@@ -35,7 +35,7 @@ export default function StatsCard({ title, value, suffix, meta, featured }: Stat
         value={value}
         suffix={suffix}
         valueStyle={{
-          fontFamily: 'Georgia, serif',
+          fontFamily: 'var(--app-heading-font)',
           fontSize: 36,
           fontWeight: 500,
           lineHeight: 1,

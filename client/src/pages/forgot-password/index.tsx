@@ -24,7 +24,7 @@ export default function ForgotPasswordPage() {
 
     try {
       const response = await forgotPassword(values.email);
-      message.success(response.message || 'Đã gửi yêu cầu đặt lại mật khẩu. Vui lòng kiểm tra email.', 3);
+      message.success(response.message || 'Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến email của bạn.', 3);
     } catch (error) {
       message.error(getErrorMessage(error, 'Không thể gửi yêu cầu đặt lại mật khẩu.'), 3);
     } finally {
@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
       >
         <Typography.Title
           level={1}
-          style={{ fontFamily: 'Georgia, serif', fontSize: 38, color: '#1A1F1B', margin: '0 0 12px' }}
+          style={{ fontFamily: 'var(--app-heading-font)', fontSize: 38, color: '#1A1F1B', margin: '0 0 12px' }}
         >
           Quên mật khẩu
         </Typography.Title>

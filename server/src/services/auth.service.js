@@ -7,6 +7,27 @@ const sequelize = require('../config/database');
 const emailService = require('./email.service');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'borrow-equipment-secret';
+const DEFAULT_FRONTEND_URL = 'http://localhost:8000';
+const FORGOT_PASSWORD_SAFE_MESSAGE = 'Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến email của bạn.';
+
+function getFrontendUrl() {
+  const configuredUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || DEFAULT_FRONTEND_URL;
+  return configuredUrl.replace(/\/+$/, '');
+}
+
+async function getUserDisplayName(user) {
+  if (user.role === 'student') {
+    const student = await Student.findOne({ where: { userId: user.id } });
+    return student?.fullName?.trim() || 'bạn';
+  }
+
+  if (user.role === 'admin') {
+    const admin = await Admin.findOne({ where: { userId: user.id } });
+    return admin?.fullName?.trim() || 'bạn';
+  }
+
+  return 'bạn';
+}
 
 // Đang nhập
 async function loginUser(email, password) {
@@ -109,7 +130,7 @@ async function forgotPassword(email) {
   const user = await User.findOne({ where: { email, isActive: true } });
   
   if (!user) {
-    throw { status: 404, message: 'Email không tồn tại trong hệ thống hoặc đã bị khóa!' };
+    return { message: FORGOT_PASSWORD_SAFE_MESSAGE };
   }
 
   // Tạo một token đặc biệt, chỉ có thời hạn 15 phút
@@ -120,22 +141,31 @@ async function forgotPassword(email) {
   );
 
   // Tạo đường link dẫn tới màn hình Frontend
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = getFrontendUrl();
   const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+  const displayName = await getUserDisplayName(user);
 
   // Gửi email
   const isSent = await emailService.sendDynamicEmail(
     'forgot_password', 
     user.email, 
-    { reset_link: resetLink },
+    {
+      reset_link: resetLink,
+      resetLink,
+      name: displayName,
+      fullName: displayName,
+      appName: 'Hệ thống Quản lý Thiết bị',
+      year: new Date().getFullYear()
+    },
     user.id
   );
 
   if (!isSent) {
+    console.error(`[FORGOT PASSWORD] Không thể gửi email đặt lại mật khẩu tới ${email}`);
     throw { status: 500, message: 'Không thể gửi email lúc này. Vui lòng thử lại sau.' };
   }
 
-  return { message: 'Đã gửi đường dẫn đặt lại mật khẩu qua email của bạn.' };
+  return { message: FORGOT_PASSWORD_SAFE_MESSAGE };
 }
 
 // Hàm Xác nhận đổi mật khẩu mới

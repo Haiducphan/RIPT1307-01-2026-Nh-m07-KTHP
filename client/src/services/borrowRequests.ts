@@ -13,6 +13,7 @@ export interface CreateBorrowRequestPayload {
 
 interface RawBorrowRequest {
   id?: string | number;
+  code?: string;
   requestCode?: string;
   request_code?: string;
   studentId?: string | number;
@@ -28,7 +29,17 @@ interface RawBorrowRequest {
     student_code?: string;
     code?: string;
     mssv?: string;
+    trustScore?: number | string;
+    trust_score?: number | string;
+    trustRank?: string;
+    trust_rank?: string;
+    rank?: string;
   };
+  trustScore?: number | string;
+  trust_score?: number | string;
+  trustRank?: string;
+  trust_rank?: string;
+  rank?: string;
   deviceId?: string | number;
   equipmentId?: string | number;
   equipment_id?: string | number;
@@ -39,15 +50,28 @@ interface RawBorrowRequest {
   quantity?: number;
   borrowDate?: string;
   borrow_date?: string;
+  startDate?: string;
+  start_date?: string;
   returnDate?: string;
   return_date?: string;
+  expectedReturnDate?: string;
+  expected_return_date?: string;
+  dueDate?: string;
+  due_date?: string;
   purpose?: string;
+  reason?: string;
   note?: string;
   eventName?: string;
   event_name?: string;
+  rejectReason?: string;
+  reject_reason?: string;
+  rejectionReason?: string;
+  rejection_reason?: string;
   status?: BorrowRequest['status'] | string | null;
   createdAt?: string;
   created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
 }
 
 interface BorrowRequestsResponse {
@@ -62,13 +86,23 @@ export interface NormalizedBorrowRequest extends BorrowRequest {
   studentCode: string;
   purpose: string;
   eventName: string;
+  trustScore?: number;
+  trustRank?: string;
+  rejectReason?: string;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+function toOptionalNumber(value: unknown) {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function normalizeBorrowRequest(raw: RawBorrowRequest): NormalizedBorrowRequest {
   const id = String(raw.id ?? '');
   const deviceId = String(raw.deviceId ?? raw.equipmentId ?? raw.equipment_id ?? '');
-  const purpose = raw.purpose ?? raw.note ?? '';
+  const purpose = raw.purpose ?? raw.reason ?? raw.note ?? '';
   const studentCode =
     raw.studentCode ??
     raw.student_code ??
@@ -80,7 +114,7 @@ function normalizeBorrowRequest(raw: RawBorrowRequest): NormalizedBorrowRequest 
 
   return {
     id,
-    requestCode: raw.requestCode ?? raw.request_code ?? `REQ-${id}`,
+    requestCode: raw.requestCode ?? raw.request_code ?? raw.code ?? `REQ-${id}`,
     studentId: String(raw.studentId ?? raw.student_id ?? ''),
     studentName:
       raw.studentName ??
@@ -97,13 +131,17 @@ function normalizeBorrowRequest(raw: RawBorrowRequest): NormalizedBorrowRequest 
       raw.device?.name ??
       `Thiết bị #${deviceId}`,
     quantity: raw.quantity ?? 1,
-    borrowDate: raw.borrowDate ?? raw.borrow_date ?? '',
-    returnDate: raw.returnDate ?? raw.return_date ?? '',
+    borrowDate: raw.borrowDate ?? raw.borrow_date ?? raw.startDate ?? raw.start_date ?? '',
+    returnDate: raw.returnDate ?? raw.return_date ?? raw.expectedReturnDate ?? raw.expected_return_date ?? raw.dueDate ?? raw.due_date ?? '',
     purpose,
     note: purpose,
     eventName: raw.eventName ?? raw.event_name ?? '',
     status: normalizeBorrowStatus(raw.status),
-    createdAt: raw.createdAt ?? raw.created_at
+    trustScore: toOptionalNumber(raw.trustScore ?? raw.trust_score ?? raw.student?.trustScore ?? raw.student?.trust_score),
+    trustRank: raw.trustRank ?? raw.trust_rank ?? raw.rank ?? raw.student?.trustRank ?? raw.student?.trust_rank ?? raw.student?.rank,
+    rejectReason: raw.rejectReason ?? raw.reject_reason ?? raw.rejectionReason ?? raw.rejection_reason,
+    createdAt: raw.createdAt ?? raw.created_at,
+    updatedAt: raw.updatedAt ?? raw.updated_at
   };
 }
 

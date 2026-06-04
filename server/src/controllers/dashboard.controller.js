@@ -54,7 +54,8 @@ async function getStudentStats(req, res) {
 // Lấy thống kê thời gian
 async function getTimeStats(req, res) {
   try {
-    const data = await dashboardService.getTimeStats();
+    const { targetYear } = getMonthYear(req);
+    const data = await dashboardService.getTimeStats(targetYear);
     res.json({ message: 'Success', data });
   } catch (error) {
     console.error('getTimeStats Error:', error);

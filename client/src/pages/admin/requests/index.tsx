@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
+  Alert,
   Avatar,
   Button,
   Card,
   Checkbox,
-  Col,
   DatePicker,
   Empty,
   Form,
@@ -13,22 +13,25 @@ import {
   message,
   Modal,
   Radio,
-  Row,
+  Select,
   Space,
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
+import { history } from 'umi';
 import { approveBorrowRequest, getBorrowRequests, handoverBorrowRequest, markReturned, rejectBorrowRequest } from '@/services/borrowRequests';
 import type { NormalizedBorrowRequest } from '@/services/borrowRequests';
 import { useAsyncData } from '@/hooks/useAsyncData';
-import { BORROW_STATUS_COLOR, BORROW_STATUS_LABEL } from '@/constants/borrowStatus';
+import { BORROW_STATUS_COLOR } from '@/constants/borrowStatus';
+import { ROUTES } from '@/constants/routes';
 import type { BorrowRequest } from '@/types';
 type RequestStatus = BorrowRequest['status'];
-type RequestTab = 'all' | 'pending' | 'approved' | 'borrowing' | 'returned' | 'overdue';
+type RequestTab = 'all' | 'pending' | 'approved' | 'borrowing' | 'overdue' | 'returned' | 'closed';
 type AdminActionType = 'approve' | 'reject' | 'handover' | 'return';
 interface AdminRequest extends Omit<BorrowRequest, 'id' | 'status'> {
   id: string | number;
@@ -39,12 +42,15 @@ interface AdminRequest extends Omit<BorrowRequest, 'id' | 'status'> {
   purpose?: string;
   eventName?: string;
   createdAt?: string;
+  trustScore?: number;
+  trustRank?: string;
   rejectReason?: string;
   returnCondition?: string;
   returnNote?: string;
 }
 interface RejectFormValues {
   reason: string;
+  note?: string;
 }
 interface ReturnFormValues {
   condition: string;
@@ -56,36 +62,53 @@ const STATUS_DESCRIPTION: Record<RequestStatus, string> = {
   approved: 'Chờ bàn giao',
   borrowed: 'Chờ ghi nhận trả',
   borrowing: 'Chờ ghi nhận trả',
-  returned: 'Hoàn tất',
-  returned_ontime: 'Trả đúng hạn',
-  returned_late: 'Trả trễ hạn',
-  cancelled: 'Sinh viên đã huỷ',
-  canceled: 'Sinh viên đã huỷ',
-  cancelled_noshow: 'Không đến nhận',
-  rejected: 'Admin đã từ chối',
+  returned: 'Đã trả / Đã hoàn tất',
+  returned_ontime: 'Đã trả / Đã hoàn tất',
+  returned_late: 'Đã trả / Đã hoàn tất',
+  cancelled: 'Đã huỷ / Từ chối',
+  canceled: 'Đã huỷ / Từ chối',
+  cancelled_noshow: 'Đã huỷ / Từ chối',
+  rejected: 'Đã huỷ / Từ chối',
   overdue: 'Cần ghi nhận trả'
 };
 const STATUS_TONE: Record<RequestStatus, { color: string; bg: string; label?: string; description?: string }> = {
   pending: { label: 'Chờ duyệt', description: 'Cần admin xét duyệt', color: '#8B6A1F', bg: '#F5EBD0' },
-  approved: { label: 'Đã duyệt', description: 'Chờ bàn giao', color: '#2563EB', bg: '#DCE4F0' },
+  approved: { label: 'Đã duyệt / Chờ bàn giao', description: 'Chờ bàn giao', color: '#2563EB', bg: '#DCE4F0' },
   borrowed: { label: 'Đang mượn', description: 'Chờ ghi nhận trả', color: '#6D4A8F', bg: '#E8DEF0' },
   borrowing: { label: 'Đang mượn', description: 'Chờ ghi nhận trả', color: '#6D4A8F', bg: '#E8DEF0' },
-  returned: { label: 'Đã trả', description: 'Hoàn tất', color: '#2F6F3E', bg: '#E1EFE3' },
-  returned_ontime: { label: 'Đã trả', description: 'Trả đúng hạn', color: '#2F6F3E', bg: '#E1EFE3' },
-  returned_late: { label: 'Đã trả', description: 'Trả trễ hạn', color: '#8B6A1F', bg: '#F5EBD0' },
-  cancelled: { label: 'Đã huỷ', description: 'Sinh viên đã huỷ', color: '#6B6F6C', bg: '#ECEEF2' },
-  canceled: { label: 'Đã huỷ', description: 'Sinh viên đã huỷ', color: '#6B6F6C', bg: '#ECEEF2' },
-  cancelled_noshow: { label: 'Đã huỷ', description: 'Không đến nhận', color: '#6B6F6C', bg: '#ECEEF2' },
-  rejected: { label: 'Đã từ chối', description: 'Admin đã từ chối', color: '#9B3E33', bg: '#F2DDD7' },
+  returned: { label: 'Đã trả / Đã hoàn tất', description: 'Hoàn tất', color: '#2F6F3E', bg: '#E1EFE3' },
+  returned_ontime: { label: 'Đã trả / Đã hoàn tất', description: 'Trả đúng hạn', color: '#2F6F3E', bg: '#E1EFE3' },
+  returned_late: { label: 'Đã trả / Đã hoàn tất', description: 'Trả trễ hạn', color: '#8B6A1F', bg: '#F5EBD0' },
+  cancelled: { label: 'Đã huỷ / Từ chối', description: 'Sinh viên đã huỷ', color: '#6B6F6C', bg: '#ECEEF2' },
+  canceled: { label: 'Đã huỷ / Từ chối', description: 'Sinh viên đã huỷ', color: '#6B6F6C', bg: '#ECEEF2' },
+  cancelled_noshow: { label: 'Đã huỷ / Từ chối', description: 'Không đến nhận', color: '#6B6F6C', bg: '#ECEEF2' },
+  rejected: { label: 'Đã huỷ / Từ chối', description: 'Admin đã từ chối', color: '#9B3E33', bg: '#F2DDD7' },
   overdue: { label: 'Quá hạn', description: 'Cần ghi nhận trả', color: '#7A241B', bg: '#F2DDD7' }
 };
-const BORROWING_STATUSES: RequestStatus[] = ['borrowing', 'overdue'];
+const BORROWING_STATUSES: RequestStatus[] = ['borrowing'];
+const RETURNABLE_STATUSES: RequestStatus[] = ['borrowing', 'overdue'];
 const RETURNED_STATUSES: RequestStatus[] = ['returned', 'returned_ontime', 'returned_late'];
+const CLOSED_STATUSES: RequestStatus[] = ['cancelled', 'canceled', 'cancelled_noshow', 'rejected'];
+type StudentRank = 'diamond' | 'gold' | 'silver' | 'bronze' | 'pebble';
+const RANK_CONFIG: Record<StudentRank, { label: string; color: string; bg: string }> = {
+  diamond: { label: 'Kim cương', color: '#075985', bg: '#E0F2FE' },
+  gold: { label: 'Vàng', color: '#8B6A1F', bg: '#F5EBD0' },
+  silver: { label: 'Bạc', color: '#4A5568', bg: '#ECEEF2' },
+  bronze: { label: 'Đồng', color: '#8C4A36', bg: '#F7E8DF' },
+  pebble: { label: 'Đá cuội', color: '#3F403D', bg: '#EFE9DD' }
+};
+const REJECT_REASONS = [
+  { value: 'not_enough_quantity', label: 'Thiết bị không còn đủ số lượng' },
+  { value: 'invalid_purpose', label: 'Mục đích mượn chưa phù hợp' },
+  { value: 'unclear_information', label: 'Thông tin yêu cầu chưa rõ ràng' },
+  { value: 'student_not_eligible', label: 'Sinh viên chưa đủ điều kiện mượn' },
+  { value: 'other', label: 'Khác' }
+];
 const RETURN_CONDITIONS = [
-  { value: 'perfect', label: 'Hoàn hảo', points: '+2đ uy tín', tone: '#2F6F3E' },
-  { value: 'minor_damage', label: 'Trầy nhẹ', points: '0đ uy tín', tone: '#6B6F6C' },
-  { value: 'major_damage', label: 'Hỏng nhẹ', points: '-3đ uy tín', tone: '#B05A4D' },
-  { value: 'lost', label: 'Hỏng nặng / mất', points: '-10đ uy tín', tone: '#9B3E33' }
+  { value: 'perfect', label: 'Bình thường', points: '+2đ uy tín', tone: '#2F6F3E' },
+  { value: 'minor_damage', label: 'Hư hỏng nhẹ', points: '0đ uy tín', tone: '#6B6F6C' },
+  { value: 'major_damage', label: 'Hư hỏng nặng', points: '-3đ uy tín', tone: '#B05A4D' },
+  { value: 'lost', label: 'Mất thiết bị', points: '-10đ uy tín', tone: '#9B3E33' }
 ];
 function normalizeText(value?: string | null) {
   return String(value ?? '')
@@ -111,6 +134,45 @@ function getInitials(name: string) {
     .join('')
     .toUpperCase();
 }
+function deriveRankFromTrustScore(score: number): StudentRank {
+  if (score >= 90) return 'diamond';
+  if (score >= 80) return 'gold';
+  if (score >= 66) return 'silver';
+  if (score >= 50) return 'bronze';
+  return 'pebble';
+}
+function normalizeTrustRank(rank?: string): StudentRank | undefined {
+  const normalized = rank?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (['diamond', 'kim cương', 'kim cuong'].includes(normalized)) return 'diamond';
+  if (['gold', 'vàng', 'vang'].includes(normalized)) return 'gold';
+  if (['silver', 'bạc', 'bac'].includes(normalized)) return 'silver';
+  if (['bronze', 'đồng', 'dong'].includes(normalized)) return 'bronze';
+  if (['pebble', 'stone', 'rock', 'đá cuội', 'da cuoi', 'da_cuoi'].includes(normalized)) return 'pebble';
+  return undefined;
+}
+function RankTag({ score, rank }: { score?: number; rank?: string }) {
+  const normalizedRank = typeof score === 'number' ? deriveRankFromTrustScore(score) : normalizeTrustRank(rank);
+  if (!normalizedRank) return <Typography.Text type="secondary">—</Typography.Text>;
+  const config = RANK_CONFIG[normalizedRank];
+  return (
+    <Tag style={{ border: 'none', borderRadius: 999, color: config.color, background: config.bg, fontWeight: 700, margin: 0 }}>
+      {typeof score === 'number' ? `${config.label} · ${score}` : config.label}
+    </Tag>
+  );
+}
+function RequestCodeCell({ request }: { request: AdminRequest }) {
+  const code = getRequestCode(request);
+  return (
+    <Typography.Text
+      strong
+      title={code}
+      style={{ display: 'inline-block', maxWidth: 118, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'bottom' }}
+    >
+      {code}
+    </Typography.Text>
+  );
+}
 function getDeviceIcon(deviceName?: string | null) {
   const text = normalizeText(deviceName);
   if (text.includes('micro')) return '🎤';
@@ -123,13 +185,94 @@ function getDeviceIcon(deviceName?: string | null) {
 }
 function formatDate(value: string, pattern = 'DD/MM') {
   const date = dayjs(value);
+  if (!value) return 'Chưa cập nhật';
   return date.isValid() ? date.format(pattern) : value;
 }
 function ellipsisText(value = '', max = 50) {
   return value.length > max ? `${value.slice(0, max)}...` : value;
 }
 function getPurpose(request: AdminRequest) {
-  return request.purpose?.trim() || request.note?.trim() || 'Chưa có ghi chú';
+  return request.purpose?.trim() || request.note?.trim() || 'Chưa cập nhật';
+}
+function statusMatchesTab(status: RequestStatus, tab: RequestTab) {
+  if (tab === 'all') return true;
+  if (tab === 'borrowing') return BORROWING_STATUSES.includes(status);
+  if (tab === 'returned') return RETURNED_STATUSES.includes(status);
+  if (tab === 'closed') return CLOSED_STATUSES.includes(status);
+  return status === tab;
+}
+function getTabFromStatusQuery(status?: string | null): RequestTab {
+  switch (status) {
+    case 'pending':
+      return 'pending';
+    case 'approved':
+      return 'approved';
+    case 'borrowed':
+    case 'borrowing':
+      return 'borrowing';
+    case 'overdue':
+      return 'overdue';
+    case 'returned':
+    case 'returned_ontime':
+    case 'returned_late':
+      return 'returned';
+    case 'cancelled':
+    case 'canceled':
+    case 'cancelled_noshow':
+    case 'rejected':
+      return 'closed';
+    default:
+      return 'all';
+  }
+}
+function getStatusQueryFromTab(tab: RequestTab) {
+  if (tab === 'all') return undefined;
+  if (tab === 'closed') return 'cancelled';
+  return tab;
+}
+function getRequestQueryState() {
+  if (typeof window === 'undefined') return { tab: 'all' as RequestTab, requestId: undefined as string | undefined };
+
+  const params = new URLSearchParams(window.location.search);
+  return {
+    tab: getTabFromStatusQuery(params.get('status')),
+    requestId: params.get('requestId') || undefined
+  };
+}
+function buildRequestsUrl(tab: RequestTab, requestId?: string | number) {
+  const params = new URLSearchParams();
+  const status = getStatusQueryFromTab(tab);
+  if (status) params.set('status', status);
+  if (requestId !== undefined && requestId !== null && String(requestId)) params.set('requestId', String(requestId));
+  const query = params.toString();
+  return query ? `${ROUTES.adminRequests}?${query}` : ROUTES.adminRequests;
+}
+function requestMatchesFilters(
+  request: AdminRequest,
+  keyword: string,
+  dateRange: [Dayjs, Dayjs] | null,
+  returnDateRange: [Dayjs, Dayjs] | null,
+  rankFilter: StudentRank | 'all'
+) {
+  const matchesSearch =
+    !keyword ||
+    normalizeText(`${getRequestCode(request)} ${request.studentName} ${request.studentCode} ${request.deviceName} ${getPurpose(request)}`).includes(keyword);
+  const borrowDate = dayjs(request.borrowDate);
+  const matchesDate =
+    !dateRange ||
+    !borrowDate.isValid() ||
+    ((borrowDate.isSame(dateRange[0], 'day') || borrowDate.isAfter(dateRange[0], 'day')) &&
+      (borrowDate.isSame(dateRange[1], 'day') || borrowDate.isBefore(dateRange[1], 'day')));
+  const returnDate = dayjs(request.returnDate);
+  const matchesReturnDate =
+    !returnDateRange ||
+    !returnDate.isValid() ||
+    ((returnDate.isSame(returnDateRange[0], 'day') || returnDate.isAfter(returnDateRange[0], 'day')) &&
+      (returnDate.isSame(returnDateRange[1], 'day') || returnDate.isBefore(returnDateRange[1], 'day')));
+  const requestRank = typeof request.trustScore === 'number' ? deriveRankFromTrustScore(request.trustScore) : normalizeTrustRank(request.trustRank);
+  const matchesRank = rankFilter === 'all' || requestRank === rankFilter;
+
+  return matchesSearch && matchesDate && matchesReturnDate && matchesRank;
 }
 function getErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === 'object' && 'response' in error) {
@@ -151,25 +294,10 @@ function StatusTag({ status }: { status: RequestStatus }) {
   return (
     <div style={{ display: 'grid', gap: 4, justifyItems: 'start' }}>
       <Tag color={BORROW_STATUS_COLOR[status]} style={{ border: 'none', borderRadius: 999, color: tone.color, background: tone.bg, fontWeight: 700, margin: 0 }}>
-        {BORROW_STATUS_LABEL[status] ?? status}
+        {tone.label ?? status}
       </Tag>
       <span style={{ color: '#8A8E88', fontSize: 12 }}>{STATUS_DESCRIPTION[status] ?? 'Chưa có dữ liệu'}</span>
     </div>
-  );
-}
-function StatCard({ title, value, meta, danger, featured }: { title: string; value: number; meta: string; danger?: boolean; featured?: boolean }) {
-  return (
-    <Card
-      variant="borderless"
-      style={{ borderRadius: 14, border: featured ? '1px solid #2D4A3E' : '1px solid #E5DECB', background: featured ? '#2D4A3E' : '#FFFFFF' }}
-      styles={{ body: { padding: 20 } }}
-    >
-      <div style={{ color: featured ? 'rgba(255,255,255,0.72)' : '#6B6F6C', fontSize: 11, letterSpacing: '0.08em' }}>{title}</div>
-      <div style={{ fontFamily: 'Georgia, serif', fontSize: 34, color: danger ? '#B05A4D' : featured ? '#FFFFFF' : '#1A1F1B', marginTop: 8 }}>
-        {value}
-      </div>
-      <div style={{ color: featured ? 'rgba(255,255,255,0.72)' : '#6B6F6C', fontSize: 12 }}>{meta}</div>
-    </Card>
   );
 }
 function RequestDetailPanel({ request, actions }: { request?: AdminRequest; actions: (request: AdminRequest) => ReactNode }) {
@@ -194,7 +322,7 @@ function RequestDetailPanel({ request, actions }: { request?: AdminRequest; acti
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
         <div>
           <div style={{ color: '#8A8E88', fontSize: 12, marginBottom: 4 }}>Mã đơn</div>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, color: '#1A1F1B' }}>{getRequestCode(request)}</div>
+          <div style={{ fontFamily: 'var(--app-heading-font)', fontSize: 24, color: '#1A1F1B' }}>{getRequestCode(request)}</div>
         </div>
         <StatusTag status={request.status} />
       </div>
@@ -206,6 +334,9 @@ function RequestDetailPanel({ request, actions }: { request?: AdminRequest; acti
         <div>
           <div style={{ fontWeight: 700 }}>{request.studentName}</div>
           <div style={{ color: '#6B6F6C', fontSize: 13 }}>{request.studentCode}</div>
+          <div style={{ marginTop: 6 }}>
+            <RankTag score={request.trustScore} rank={request.trustRank} />
+          </div>
         </div>
       </div>
 
@@ -224,6 +355,13 @@ function RequestDetailPanel({ request, actions }: { request?: AdminRequest; acti
         <div style={{ color: '#1A1F1B', lineHeight: 1.6 }}>{getPurpose(request)}</div>
       </div>
 
+      {request.rejectReason ? (
+        <div style={{ borderTop: '1px solid #EFEADA', paddingTop: 14 }}>
+          <div style={{ color: '#6B6F6C', fontSize: 12, marginBottom: 6 }}>Lý do từ chối</div>
+          <div style={{ color: '#1A1F1B', lineHeight: 1.6 }}>{request.rejectReason}</div>
+        </div>
+      ) : null}
+
       <div style={{ borderTop: '1px solid #EFEADA', paddingTop: 14 }}>{actions(request)}</div>
     </div>
   );
@@ -233,26 +371,20 @@ export default function AdminRequestsPage() {
   const [returnForm] = Form.useForm<ReturnFormValues>();
   const { data, loading, refresh } = useAsyncData(() => getBorrowRequests({ page: 1, limit: 1000 }));
   const [requests, setRequests] = useState<AdminRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<RequestTab>('all');
+  const [activeTab, setActiveTab] = useState<RequestTab>(() => getRequestQueryState().tab);
+  const [highlightedRequestId, setHighlightedRequestId] = useState<string | undefined>(() => getRequestQueryState().requestId);
   const [searchText, setSearchText] = useState('');
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [returnDateRange, setReturnDateRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [rankFilter, setRankFilter] = useState<StudentRank | 'all'>('all');
   const [selectedId, setSelectedId] = useState<AdminRequest['id']>();
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [actionKey, setActionKey] = useState<string>();
-  const [isMobile, setIsMobile] = useState(() => (typeof window === 'undefined' ? false : window.innerWidth < 768));
   const [rejectTarget, setRejectTarget] = useState<AdminRequest>();
   const [handoverTarget, setHandoverTarget] = useState<AdminRequest>();
   const [returnTarget, setReturnTarget] = useState<AdminRequest>();
   const [handoverChecked, setHandoverChecked] = useState(false);
-  const detailPanelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   useEffect(() => {
     if (!data) return;
@@ -260,41 +392,45 @@ export default function AdminRequestsPage() {
     const nextRequests = data.map(toAdminRequest);
     setRequests(nextRequests);
     setSelectedId((currentId) => {
+      const highlightedRequest = highlightedRequestId
+        ? nextRequests.find((request) => String(request.id) === highlightedRequestId)
+        : undefined;
+      if (highlightedRequest) return highlightedRequest.id;
       if (currentId && nextRequests.some((request) => request.id === currentId)) return currentId;
       return nextRequests[0]?.id;
     });
-  }, [data]);
+  }, [data, highlightedRequestId]);
+
+  useEffect(() => {
+    const syncQueryState = () => {
+      const queryState = getRequestQueryState();
+      setActiveTab(queryState.tab);
+      setHighlightedRequestId(queryState.requestId);
+    };
+
+    const unlisten = history.listen(syncQueryState);
+    return unlisten;
+  }, []);
+  const keyword = useMemo(() => normalizeText(searchText.trim()), [searchText]);
+  const baseFilteredRequests = useMemo(
+    () => requests.filter((request) => requestMatchesFilters(request, keyword, dateRange, returnDateRange, rankFilter)),
+    [dateRange, keyword, rankFilter, requests, returnDateRange]
+  );
   const counts = useMemo(
     () => ({
-      all: requests.length,
-      pending: requests.filter((item) => item.status === 'pending').length,
-      approved: requests.filter((item) => item.status === 'approved').length,
-      borrowed: requests.filter((item) => item.status === 'borrowing').length,
-      returned: requests.filter((item) => RETURNED_STATUSES.includes(item.status)).length,
-      overdue: requests.filter((item) => item.status === 'overdue').length
+      all: baseFilteredRequests.length,
+      pending: baseFilteredRequests.filter((item) => item.status === 'pending').length,
+      approved: baseFilteredRequests.filter((item) => item.status === 'approved').length,
+      borrowing: baseFilteredRequests.filter((item) => BORROWING_STATUSES.includes(item.status)).length,
+      overdue: baseFilteredRequests.filter((item) => item.status === 'overdue').length,
+      returned: baseFilteredRequests.filter((item) => RETURNED_STATUSES.includes(item.status)).length,
+      closed: baseFilteredRequests.filter((item) => CLOSED_STATUSES.includes(item.status)).length
     }),
-    [requests]
+    [baseFilteredRequests]
   );
   const filteredRequests = useMemo(() => {
-    const keyword = normalizeText(searchText.trim());
-    return requests.filter((request) => {
-      const matchesTab =
-        activeTab === 'all' ||
-        request.status === activeTab ||
-        (activeTab === 'borrowing' && request.status === 'borrowing') ||
-        (activeTab === 'returned' && RETURNED_STATUSES.includes(request.status));
-      const matchesSearch =
-        !keyword ||
-        normalizeText(`${getRequestCode(request)} ${request.studentName} ${request.studentCode} ${request.deviceName}`).includes(keyword);
-      const borrowDate = dayjs(request.borrowDate);
-      const matchesDate =
-        !dateRange ||
-        !borrowDate.isValid() ||
-        (borrowDate.isSame(dateRange[0], 'day') || borrowDate.isAfter(dateRange[0], 'day')) &&
-          (borrowDate.isSame(dateRange[1], 'day') || borrowDate.isBefore(dateRange[1], 'day'));
-      return matchesTab && matchesSearch && matchesDate;
-    });
-  }, [activeTab, dateRange, requests, searchText]);
+    return baseFilteredRequests.filter((request) => statusMatchesTab(request.status, activeTab));
+  }, [activeTab, baseFilteredRequests]);
   const selectedRequest = requests.find((request) => request.id === selectedId) ?? filteredRequests[0];
 
   useEffect(() => {
@@ -305,21 +441,11 @@ export default function AdminRequestsPage() {
 
   const isActionLoading = (type: AdminActionType, requestId?: AdminRequest['id']) => actionKey === `${type}:${requestId}`;
   const isAnyActionLoading = Boolean(actionKey);
-  const focusDetailPanel = () => {
-    window.setTimeout(() => {
-      detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-      detailPanelRef.current?.focus({ preventScroll: true });
-    }, 50);
-  };
-  const selectRequest = (request: AdminRequest, openMobileDetail = false) => {
-    setSelectedId(request.id);
-
-    if (isMobile && openMobileDetail) {
-      setDetailModalOpen(true);
-      return;
-    }
-
-    if (!isMobile) focusDetailPanel();
+  const handleTabChange = (key: string) => {
+    const nextTab = key as RequestTab;
+    setActiveTab(nextTab);
+    setHighlightedRequestId(undefined);
+    history.replace(buildRequestsUrl(nextTab));
   };
   const runAction = async (type: AdminActionType, request: AdminRequest, action: () => Promise<unknown>, successMessage: string) => {
     setActionKey(`${type}:${request.id}`);
@@ -339,12 +465,36 @@ export default function AdminRequestsPage() {
   };
 
   const handleApprove = (request: AdminRequest) => {
-    void runAction('approve', request, () => approveBorrowRequest(String(request.id)), 'Đã duyệt đơn');
+    setSelectedId(request.id);
+    Modal.confirm({
+      title: `Xác nhận duyệt yêu cầu ${getRequestCode(request)}`,
+      okText: 'Xác nhận duyệt',
+      cancelText: 'Huỷ',
+      content: (
+        <div style={{ lineHeight: 1.8 }}>
+          <div>
+            Sinh viên: <strong>{request.studentName}</strong>
+          </div>
+          <div>
+            Thiết bị: <strong>{request.deviceName} × {request.quantity}</strong>
+          </div>
+          <div>
+            Ngày mượn: <strong>{formatDate(request.borrowDate, 'DD/MM/YYYY')}</strong>
+          </div>
+          <div>
+            Ngày trả dự kiến: <strong>{formatDate(request.returnDate, 'DD/MM/YYYY')}</strong>
+          </div>
+        </div>
+      ),
+      onOk: () => runAction('approve', request, () => approveBorrowRequest(String(request.id)), 'Đã duyệt đơn')
+    });
   };
   const handleReject = async (values: RejectFormValues) => {
     if (!rejectTarget) return;
 
-    const success = await runAction('reject', rejectTarget, () => rejectBorrowRequest(String(rejectTarget.id), values.reason), 'Đã từ chối đơn');
+    const reasonLabel = REJECT_REASONS.find((item) => item.value === values.reason)?.label ?? values.reason;
+    const finalReason = values.note?.trim() ? `${reasonLabel}. ${values.note.trim()}` : reasonLabel;
+    const success = await runAction('reject', rejectTarget, () => rejectBorrowRequest(String(rejectTarget.id), finalReason), 'Đã từ chối đơn');
     if (success) {
       setRejectTarget(undefined);
       rejectForm.resetFields();
@@ -407,15 +557,29 @@ export default function AdminRequestsPage() {
     returnForm.setFieldsValue({ condition: 'perfect', note: '' });
   };
   const showDetail = (request: AdminRequest) => {
-    selectRequest(request, true);
+    setSelectedId(request.id);
+    setDetailModalOpen(true);
   };
-  const actionButtons = (request: AdminRequest) => {
+  const actionButtons = (request: AdminRequest, includeDetail = true) => {
     const selected = selectedRequest?.id === request.id;
+    const detailButton = includeDetail ? (
+      <Button
+        size="small"
+        type={selected ? 'primary' : 'default'}
+        onClick={(event) => {
+          event.stopPropagation();
+          showDetail(request);
+        }}
+      >
+        Chi tiết
+      </Button>
+    ) : null;
 
     if (request.status === 'pending') {
       return (
-        <Space>
+        <Space size={6} style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
           <Button
+            size="small"
             type="primary"
             loading={isActionLoading('approve', request.id)}
             disabled={isAnyActionLoading && !isActionLoading('approve', request.id)}
@@ -427,6 +591,7 @@ export default function AdminRequestsPage() {
             Duyệt
           </Button>
           <Button
+            size="small"
             danger
             disabled={isAnyActionLoading}
             onClick={(event) => {
@@ -436,83 +601,120 @@ export default function AdminRequestsPage() {
           >
             Từ chối
           </Button>
+          {detailButton}
         </Space>
       );
     }
     if (request.status === 'approved') {
       return (
-        <Button
-          type="primary"
-          disabled={isAnyActionLoading}
-          onClick={(event) => {
-            event.stopPropagation();
-            openHandOverModal(request);
-          }}
-        >
-          Ghi nhận mượn
-        </Button>
+        <Space size={6} style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+          <Button
+            size="small"
+            type="primary"
+            disabled={isAnyActionLoading}
+            onClick={(event) => {
+              event.stopPropagation();
+              openHandOverModal(request);
+            }}
+          >
+            Ghi nhận mượn
+          </Button>
+          {detailButton}
+        </Space>
       );
     }
-    if (BORROWING_STATUSES.includes(request.status)) {
+    if (RETURNABLE_STATUSES.includes(request.status)) {
       return (
-        <Button
-          type="primary"
-          disabled={isAnyActionLoading}
-          onClick={(event) => {
-            event.stopPropagation();
-            openReturnModal(request);
-          }}
-        >
-          Ghi nhận trả
-        </Button>
+        <Space size={6} style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+          <Button
+            size="small"
+            type="primary"
+            disabled={isAnyActionLoading}
+            onClick={(event) => {
+              event.stopPropagation();
+              openReturnModal(request);
+            }}
+          >
+            Ghi nhận trả
+          </Button>
+          {request.status === 'overdue' ? (
+            <Tooltip title="Chức năng nhắc nhở sẽ khả dụng khi hệ thống hỗ trợ.">
+              <span title="Chức năng nhắc nhở sẽ khả dụng khi hệ thống hỗ trợ.">
+                <Button size="small" disabled>
+                  Nhắc nhở
+                </Button>
+              </span>
+            </Tooltip>
+          ) : null}
+          {detailButton}
+        </Space>
       );
     }
-    return (
-      <Button
-        type={selected ? 'primary' : 'default'}
-        disabled={selected && !isMobile}
-        onClick={(event) => {
-          event.stopPropagation();
-          showDetail(request);
-        }}
-      >
-        {selected ? 'Đang xem' : 'Chi tiết'}
-      </Button>
-    );
+    return detailButton;
   };
   const tabItems = [
     { key: 'all', label: `Tất cả (${counts.all})` },
     { key: 'pending', label: `Chờ duyệt (${counts.pending})` },
     { key: 'approved', label: `Đã duyệt (${counts.approved})` },
-    { key: 'borrowing', label: `Đang mượn (${counts.borrowed})` },
-    { key: 'returned', label: `Đã trả (${counts.returned})` },
-    { key: 'overdue', label: `Quá hạn (${counts.overdue})` }
+    { key: 'borrowing', label: `Đang mượn (${counts.borrowing})` },
+    { key: 'overdue', label: `Quá hạn (${counts.overdue})` },
+    { key: 'returned', label: `Đã trả / Đã hoàn tất (${counts.returned})` },
+    ...(counts.closed > 0 || activeTab === 'closed' ? [{ key: 'closed', label: `Đã huỷ / Từ chối (${counts.closed})` }] : [])
   ];
   return (
-    <div style={{ paddingBottom: 48 }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 34, fontWeight: 500, margin: '0 0 8px', color: '#1A1F1B' }}>
-          Xử lý yêu cầu mượn
-        </h1>
-        <p style={{ color: '#6B6F6C', margin: 0 }}>Duyệt đơn, ghi nhận bàn giao và hoàn trả thiết bị</p>
-      </div>
-      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-        <Col xs={24} sm={12} xl={6}>
-          <StatCard title="CHỜ DUYỆT" value={counts.pending} meta="đơn cần xử lý" featured={counts.pending > 0} />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <StatCard title="ĐÃ DUYỆT" value={counts.approved} meta="chờ bàn giao" />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <StatCard title="ĐANG MƯỢN" value={counts.borrowed} meta="đơn đang hoạt động" />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <StatCard title="QUÁ HẠN" value={counts.overdue} meta="đơn cần nhắc nhở" danger />
-        </Col>
-      </Row>
-      <Tabs activeKey={activeTab} items={tabItems} onChange={(key) => setActiveTab(key as RequestTab)} />
+    <div className="admin-requests-page">
       <style>
         {`
+          .admin-requests-page {
+            display: grid;
+            gap: 20px;
+            padding-bottom: 48px;
+          }
+          .admin-requests-page__hero {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            align-items: flex-end;
+            padding: 28px;
+            border: 1px solid #E5DECB;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #FFFCF4 0%, #F3F7F0 100%);
+            box-shadow: 0 8px 24px rgba(45, 74, 62, 0.06);
+          }
+          .admin-requests-page__title {
+            margin: 0 !important;
+            color: #1A1F1B !important;
+            font-family: var(--app-heading-font);
+            font-weight: 600 !important;
+          }
+          .admin-requests-page__title em {
+            color: #2D4A3E;
+            font-style: normal;
+          }
+          .admin-requests-page__subtitle {
+            display: block;
+            color: #6B6F6C;
+            font-size: 15px;
+            margin-top: 8px;
+          }
+          .admin-requests-page__actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+          }
+          .admin-requests-page__tabs .ant-tabs-nav {
+            margin-bottom: 0;
+          }
+          .admin-requests-page__toolbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+          }
           .admin-request-row-selected > td {
             background: #F8F4EA !important;
             border-top: 1px solid rgba(45, 74, 62, 0.22) !important;
@@ -521,23 +723,54 @@ export default function AdminRequestsPage() {
           .admin-request-row-selected > td:first-child {
             border-left: 3px solid #2D4A3E !important;
           }
+          @media (max-width: 768px) {
+            .admin-requests-page__hero {
+              align-items: stretch;
+              flex-direction: column;
+              padding: 22px;
+            }
+            .admin-requests-page__actions {
+              justify-content: flex-start;
+            }
+          }
         `}
       </style>
-      <Row gutter={[18, 18]} align="top" style={{ minWidth: 0 }}>
-        <Col xs={24} xl={15} style={{ minWidth: 0 }}>
-          <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
+
+      <header className="admin-requests-page__hero">
+        <div>
+          <Typography.Title level={1} className="admin-requests-page__title">
+            Yêu cầu <em>mượn - trả</em>
+          </Typography.Title>
+          <Typography.Text className="admin-requests-page__subtitle">Theo dõi và xử lý tất cả yêu cầu trong hệ thống</Typography.Text>
+        </div>
+        <div className="admin-requests-page__actions">
+          <Button onClick={() => setFilterModalOpen(true)}>Lọc nâng cao</Button>
+          <Tooltip title="Chức năng xuất danh sách sẽ khả dụng khi hệ thống hỗ trợ.">
+            <span title="Chức năng xuất danh sách sẽ khả dụng khi hệ thống hỗ trợ.">
+              <Button disabled>Xuất Excel</Button>
+            </span>
+          </Tooltip>
+        </div>
+      </header>
+
+      <Tabs className="admin-requests-page__tabs" activeKey={activeTab} items={tabItems} onChange={handleTabChange} />
+
+      <Card variant="borderless" style={{ borderRadius: 14, border: '1px solid #E5DECB', overflow: 'hidden' }}>
+            <div className="admin-requests-page__toolbar">
+              <div>
+                <Typography.Title level={4} style={{ margin: 0, fontFamily: 'var(--app-heading-font)', fontWeight: 600 }}>
+                  Danh sách yêu cầu
+                </Typography.Title>
+                <Typography.Text style={{ color: '#6B6F6C', fontSize: 13 }}>
+                  Đang hiển thị {filteredRequests.length.toLocaleString('vi-VN')} / {requests.length.toLocaleString('vi-VN')} yêu cầu
+                </Typography.Text>
+              </div>
               <Input.Search
                 allowClear
-                placeholder="Tìm theo tên SV hoặc mã đơn..."
+                placeholder="Tìm tên, MSSV, mã đơn..."
                 value={searchText}
                 onChange={(event) => setSearchText(event.target.value)}
                 style={{ width: 320, maxWidth: '100%' }}
-              />
-              <RangePicker
-                placeholder={['Từ ngày', 'Đến ngày']}
-                format="DD/MM/YYYY"
-                onChange={(dates) => setDateRange(dates as [Dayjs, Dayjs] | null)}
               />
             </div>
             <Table<AdminRequest>
@@ -545,10 +778,10 @@ export default function AdminRequestsPage() {
               loading={{ spinning: loading, tip: 'Đang tải yêu cầu...' }}
               dataSource={filteredRequests}
               pagination={{ pageSize: 8 }}
-              scroll={{ x: 960 }}
+              scroll={{ x: 1620 }}
               rowClassName={(request) => (selectedRequest?.id === request.id ? 'admin-request-row-selected' : '')}
               onRow={(request) => ({
-                onClick: () => selectRequest(request, isMobile),
+                onClick: () => showDetail(request),
                 style: { cursor: 'pointer' }
               })}
           locale={{
@@ -597,10 +830,15 @@ export default function AdminRequestsPage() {
             )
           }}
           columns={[
-            { title: 'Mã đơn', width: 110, render: (_, request) => <Typography.Text strong>{getRequestCode(request)}</Typography.Text> },
+            {
+              title: 'Mã đơn',
+              width: 140,
+              fixed: 'left',
+              render: (_, request) => <RequestCodeCell request={request} />
+            },
             {
               title: 'Sinh viên',
-              width: 190,
+              width: 230,
               render: (_, request) => (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Avatar style={{ background: '#2D4A3E', color: '#F5EBD0' }}>{getInitials(request.studentName)}</Avatar>
@@ -612,45 +850,128 @@ export default function AdminRequestsPage() {
               )
             },
             {
+              title: 'Hạng',
+              width: 150,
+              render: (_, request) => <RankTag score={request.trustScore} rank={request.trustRank} />
+            },
+            {
               title: 'Thiết bị',
-              width: 180,
+              width: 210,
               render: (_, request) => (
-                <span>{getDeviceIcon(request.deviceName)} {request.deviceName} × {request.quantity}</span>
+                <div>
+                  <Typography.Text strong>
+                    {getDeviceIcon(request.deviceName)} {request.deviceName}
+                  </Typography.Text>
+                  <div style={{ color: '#8A8E88', fontSize: 12 }}>Số lượng: {request.quantity}</div>
+                </div>
               )
             },
             {
-              title: 'Ngày mượn → trả',
-              width: 135,
-              render: (_, request) => `${formatDate(request.borrowDate)} → ${formatDate(request.returnDate)}`
+              title: 'Ngày mượn',
+              width: 130,
+              render: (_, request) => formatDate(request.borrowDate, 'DD/MM/YYYY')
+            },
+            {
+              title: 'Ngày trả dự kiến',
+              width: 150,
+              render: (_, request) => formatDate(request.returnDate, 'DD/MM/YYYY')
             },
             {
               title: 'Mục đích',
-              width: 160,
-              render: (_, request) => <Typography.Text style={{ color: '#6B6F6C' }}>{ellipsisText(request.purpose || request.note || '—')}</Typography.Text>
+              width: 220,
+              render: (_, request) => <Typography.Text style={{ color: '#6B6F6C' }}>{ellipsisText(getPurpose(request), 72)}</Typography.Text>
             },
-            { title: 'Trạng thái', width: 150, dataIndex: 'status', render: (status: RequestStatus) => <StatusTag status={status} /> },
-            { title: 'Hành động', width: 160, align: 'right', render: (_, request) => actionButtons(request) }
+            { title: 'Trạng thái', width: 190, dataIndex: 'status', render: (status: RequestStatus) => <StatusTag status={status} /> },
+            { title: 'Hành động', width: 330, align: 'right', render: (_, request) => <div style={{ whiteSpace: 'nowrap' }}>{actionButtons(request)}</div> }
           ]}
             />
-          </Card>
-        </Col>
-        <Col xs={24} xl={9} style={{ display: isMobile ? 'none' : undefined, minWidth: 0 }}>
-          <div ref={detailPanelRef} tabIndex={-1} style={{ outline: 'none' }}>
-            <Card
-              variant="borderless"
-              style={{ borderRadius: 14, border: '1px solid #E5DECB', position: 'sticky', top: 24 }}
-              title={<span style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 500 }}>Chi tiết xử lý</span>}
-            >
-              <RequestDetailPanel request={selectedRequest} actions={actionButtons} />
-            </Card>
+      </Card>
+      <Modal
+        title="Lọc nâng cao"
+        open={filterModalOpen}
+        okText="Áp dụng"
+        cancelText="Đặt lại"
+        onOk={() => setFilterModalOpen(false)}
+        onCancel={() => {
+          handleTabChange('all');
+          setSearchText('');
+          setDateRange(null);
+          setReturnDateRange(null);
+          setRankFilter('all');
+          setFilterModalOpen(false);
+        }}
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div>
+            <Typography.Text strong>Trạng thái</Typography.Text>
+            <Select
+              value={activeTab}
+              onChange={(value) => handleTabChange(value as RequestTab)}
+              style={{ width: '100%', marginTop: 8 }}
+              options={[
+                { value: 'all', label: 'Tất cả' },
+                { value: 'pending', label: 'Chờ duyệt' },
+                { value: 'approved', label: 'Đã duyệt' },
+                { value: 'borrowing', label: 'Đang mượn' },
+                { value: 'overdue', label: 'Quá hạn' },
+                { value: 'returned', label: 'Đã trả / Đã hoàn tất' },
+                ...(counts.closed > 0 || activeTab === 'closed' ? [{ value: 'closed', label: 'Đã huỷ / Từ chối' }] : [])
+              ]}
+            />
           </div>
-        </Col>
-      </Row>
+          <div>
+            <Typography.Text strong>Từ khoá</Typography.Text>
+            <Input
+              allowClear
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Tên sinh viên, MSSV, mã đơn, thiết bị..."
+              style={{ marginTop: 8 }}
+            />
+          </div>
+          <div>
+            <Typography.Text strong>Khoảng ngày mượn</Typography.Text>
+            <RangePicker
+              value={dateRange}
+              placeholder={['Từ ngày', 'Đến ngày']}
+              format="DD/MM/YYYY"
+              onChange={(dates) => setDateRange(dates as [Dayjs, Dayjs] | null)}
+              style={{ width: '100%', marginTop: 8 }}
+            />
+          </div>
+          <div>
+            <Typography.Text strong>Khoảng ngày trả dự kiến</Typography.Text>
+            <RangePicker
+              value={returnDateRange}
+              placeholder={['Từ ngày', 'Đến ngày']}
+              format="DD/MM/YYYY"
+              onChange={(dates) => setReturnDateRange(dates as [Dayjs, Dayjs] | null)}
+              style={{ width: '100%', marginTop: 8 }}
+            />
+          </div>
+          <div>
+            <Typography.Text strong>Hạng sinh viên</Typography.Text>
+            <Select
+              value={rankFilter}
+              onChange={(value) => setRankFilter(value as StudentRank | 'all')}
+              style={{ width: '100%', marginTop: 8 }}
+              options={[
+                { value: 'all', label: 'Tất cả hạng' },
+                { value: 'diamond', label: 'Kim cương' },
+                { value: 'gold', label: 'Vàng' },
+                { value: 'silver', label: 'Bạc' },
+                { value: 'bronze', label: 'Đồng' },
+                { value: 'pebble', label: 'Đá cuội' }
+              ]}
+            />
+          </div>
+        </div>
+      </Modal>
       <Modal
         title={
           selectedRequest ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', paddingRight: 24 }}>
-              <span style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 500 }}>{getRequestCode(selectedRequest)}</span>
+              <span style={{ fontFamily: 'var(--app-heading-font)', fontSize: 20, fontWeight: 500 }}>Chi tiết yêu cầu {getRequestCode(selectedRequest)}</span>
               <StatusTag status={selectedRequest.status} />
             </div>
           ) : (
@@ -659,12 +980,11 @@ export default function AdminRequestsPage() {
         }
         open={detailModalOpen && Boolean(selectedRequest)}
         footer={null}
-        width="calc(100vw - 24px)"
-        centered={false}
-        style={{ top: 12, maxWidth: 560 }}
+        width={720}
+        centered
         onCancel={() => setDetailModalOpen(false)}
       >
-        <RequestDetailPanel request={selectedRequest} actions={actionButtons} />
+        <RequestDetailPanel request={selectedRequest} actions={(request) => actionButtons(request, false)} />
         <Button block style={{ marginTop: 14, height: 42 }} onClick={() => setDetailModalOpen(false)}>
           Quay lại danh sách
         </Button>
@@ -677,11 +997,40 @@ export default function AdminRequestsPage() {
         confirmLoading={Boolean(rejectTarget && isActionLoading('reject', rejectTarget.id))}
         okButtonProps={{ danger: true, disabled: isAnyActionLoading && !Boolean(rejectTarget && isActionLoading('reject', rejectTarget.id)) }}
         onOk={() => rejectForm.submit()}
-        onCancel={() => setRejectTarget(undefined)}
+        onCancel={() => {
+          setRejectTarget(undefined);
+          rejectForm.resetFields();
+        }}
       >
+        <Alert
+          showIcon
+          type="warning"
+          message="Sinh viên sẽ nhận được thông báo kèm lý do từ chối."
+          style={{ marginBottom: 16, borderRadius: 12 }}
+        />
         <Form<RejectFormValues> form={rejectForm} layout="vertical" onFinish={handleReject}>
-          <Form.Item name="reason" label="Lý do từ chối" rules={[{ required: true, whitespace: true, message: 'Nhập lý do từ chối' }]}>
-            <Input.TextArea rows={4} placeholder="Nhập lý do từ chối..." />
+          <Form.Item name="reason" label="Lý do từ chối" rules={[{ required: true, message: 'Chọn lý do từ chối' }]}>
+            <Select
+              placeholder="Chọn lý do"
+              options={REJECT_REASONS.map((reason) => ({ value: reason.value, label: reason.label }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="note"
+            label="Ghi chú thêm"
+            dependencies={['reason']}
+            rules={[
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (getFieldValue('reason') !== 'other' || String(value ?? '').trim()) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('Nhập ghi chú khi chọn lý do Khác'));
+                }
+              })
+            ]}
+          >
+            <Input.TextArea rows={3} placeholder="Giải thích chi tiết để sinh viên hiểu..." />
           </Form.Item>
         </Form>
       </Modal>
@@ -697,8 +1046,10 @@ export default function AdminRequestsPage() {
       >
         {handoverTarget && (
           <div style={{ lineHeight: 1.8 }}>
+            <div>Đơn: <strong>{getRequestCode(handoverTarget)}</strong></div>
             <div>Sinh viên: <strong>{handoverTarget.studentName}</strong></div>
             <div>Thiết bị: <strong>{handoverTarget.deviceName} × {handoverTarget.quantity}</strong></div>
+            <div>Ngày mượn: <strong>{formatDate(handoverTarget.borrowDate, 'DD/MM/YYYY')}</strong></div>
             <div>Ngày trả dự kiến: <strong>{formatDate(handoverTarget.returnDate, 'DD/MM/YYYY')}</strong></div>
           </div>
         )}
@@ -717,8 +1068,13 @@ export default function AdminRequestsPage() {
       >
         {returnTarget && (
           <div style={{ lineHeight: 1.8, marginBottom: 12 }}>
+            <div>Đơn: <strong>{getRequestCode(returnTarget)}</strong></div>
             <div>Sinh viên: <strong>{returnTarget.studentName}</strong></div>
             <div>Thiết bị: <strong>{returnTarget.deviceName} × {returnTarget.quantity}</strong></div>
+            <div>Hạn trả: <strong>{formatDate(returnTarget.returnDate, 'DD/MM/YYYY')}</strong></div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              Trạng thái: <StatusTag status={returnTarget.status} />
+            </div>
           </div>
         )}
         <Form<ReturnFormValues> form={returnForm} layout="vertical" onFinish={handleReturn}>

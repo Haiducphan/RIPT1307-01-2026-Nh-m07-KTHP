@@ -39,12 +39,27 @@ type RawUser = Partial<User> & {
   trustRank?: string;
   good_return_streak?: number;
   goodReturnStreak?: number;
+  studentId?: string | number;
+  student_id?: string | number;
   studentCode?: string;
   student_code?: string;
   className?: string;
   class_name?: string;
   phone?: string;
+  borrowLocked?: boolean;
+  borrow_locked?: boolean;
+  borrowLockUntil?: string;
+  borrow_lock_until?: string;
+  borrowLockReason?: string;
+  borrow_lock_reason?: string;
+  isPermanentlyLocked?: boolean;
+  is_permanently_locked?: boolean;
+  permanentLockReason?: string;
+  permanent_lock_reason?: string;
   student?: Partial<User> & {
+    id?: string | number;
+    studentId?: string | number;
+    student_id?: string | number;
     fullName?: string;
     full_name?: string;
     name?: string;
@@ -62,6 +77,16 @@ type RawUser = Partial<User> & {
     className?: string;
     class_name?: string;
     phone?: string;
+    borrowLocked?: boolean;
+    borrow_locked?: boolean;
+    borrowLockUntil?: string;
+    borrow_lock_until?: string;
+    borrowLockReason?: string;
+    borrow_lock_reason?: string;
+    isPermanentlyLocked?: boolean;
+    is_permanently_locked?: boolean;
+    permanentLockReason?: string;
+    permanent_lock_reason?: string;
   };
   data?: RawUser;
 };
@@ -115,6 +140,7 @@ function normalizeUser(raw: RawUser): User {
     name: source.name ?? fullName,
     email: source.email ?? '',
     role: source.role ?? 'student',
+    studentId: source.studentId ?? source.student_id ?? student?.studentId ?? student?.student_id ?? student?.id,
     studentCode: source.studentCode ?? source.student_code ?? student?.studentCode ?? student?.student_code,
     className: source.className ?? source.class_name ?? student?.className ?? student?.class_name,
     phone: source.phone ?? student?.phone,
@@ -123,7 +149,12 @@ function normalizeUser(raw: RawUser): User {
     avatarUrl: normalizeUploadUrl(source.avatarUrl ?? source.avatar_url ?? source.avatar ?? student?.avatarUrl ?? student?.avatar_url ?? student?.avatar),
     trustScore: source.trustScore ?? source.trust_score ?? student?.trustScore ?? student?.trust_score,
     trustRank: source.trustRank ?? source.trust_rank ?? student?.trustRank ?? student?.trust_rank,
-    goodReturnStreak: source.goodReturnStreak ?? source.good_return_streak ?? student?.goodReturnStreak ?? student?.good_return_streak
+    goodReturnStreak: source.goodReturnStreak ?? source.good_return_streak ?? student?.goodReturnStreak ?? student?.good_return_streak,
+    borrowLocked: source.borrowLocked ?? source.borrow_locked ?? student?.borrowLocked ?? student?.borrow_locked,
+    borrowLockUntil: source.borrowLockUntil ?? source.borrow_lock_until ?? student?.borrowLockUntil ?? student?.borrow_lock_until,
+    borrowLockReason: source.borrowLockReason ?? source.borrow_lock_reason ?? student?.borrowLockReason ?? student?.borrow_lock_reason,
+    isPermanentlyLocked: source.isPermanentlyLocked ?? source.is_permanently_locked ?? student?.isPermanentlyLocked ?? student?.is_permanently_locked,
+    permanentLockReason: source.permanentLockReason ?? source.permanent_lock_reason ?? student?.permanentLockReason ?? student?.permanent_lock_reason
   };
 }
 

@@ -1,5 +1,18 @@
 import { useMemo, useState } from 'react';
-import { Avatar, Badge, Button, Empty, List, Space, Tabs, Tag, Typography } from 'antd';
+import {
+  Avatar,
+  Badge,
+  Button,
+  Empty,
+  Input,
+  List,
+  Modal,
+  Popconfirm,
+  Space,
+  Tabs,
+  Tag,
+  Typography
+} from 'antd';
 type NotificationCategory = 'request' | 'trust' | 'system';
 type NotificationType = 'approved' | 'reminder' | 'streak' | 'returned' | 'rejected' | 'system';
 type NotificationTab = 'all' | 'unread' | NotificationCategory;
@@ -138,6 +151,9 @@ function HighlightContent({ item }: { item: NotificationItem }) {
 export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<NotificationTab>('all');
   const [notifications, setNotifications] = useState(mockNotifications);
+  const [keyword, setKeyword] = useState('');
+  const [selectedNotification, setSelectedNotification] =
+  useState<NotificationItem | null>(null);
   const counts = useMemo(
     () => ({
       all: notifications.length,
@@ -148,10 +164,20 @@ export default function NotificationsPage() {
     }),
     [notifications]
   );
-  const filteredNotifications = useMemo(
-    () => getFilteredNotifications(notifications, activeTab),
-    [activeTab, notifications]
+  const filteredNotifications = useMemo(() => {
+  return getFilteredNotifications(
+    notifications,
+    activeTab
+  ).filter(
+    (item) =>
+      item.title
+        .toLowerCase()
+        .includes(keyword.toLowerCase()) ||
+      item.content
+        .toLowerCase()
+        .includes(keyword.toLowerCase())
   );
+}, [activeTab, notifications, keyword]);
   const markAsRead = (id: string) => {
     setNotifications((current) =>
       current.map((item) => (item.id === id ? { ...item, isRead: true } : item))
@@ -160,6 +186,27 @@ export default function NotificationsPage() {
   const markAllAsRead = () => {
     setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
   };
+  const toggleReadStatus = (id: string) => {
+  setNotifications((current) =>
+    current.map((item) =>
+      item.id === id
+        ? { ...item, isRead: !item.isRead }
+        : item
+    )
+  );
+};
+
+const deleteNotification = (id: string) => {
+  setNotifications((current) =>
+    current.filter((item) => item.id !== id)
+  );
+};
+
+const clearReadNotifications = () => {
+  setNotifications((current) =>
+    current.filter((item) => !item.isRead)
+  );
+};
   const tabItems = [
     { key: 'all', label: `Tất cả (${counts.all})` },
     { key: 'unread', label: `Chưa đọc (${counts.unread})` },
@@ -200,6 +247,17 @@ export default function NotificationsPage() {
           Đánh dấu đã đọc tất cả
         </Button>
       </div>
+      <Input.Search
+  placeholder="Tìm thông báo..."
+  allowClear
+  value={keyword}
+  onChange={(e) =>
+    setKeyword(e.target.value)
+  }
+  style={{
+    marginBottom: 16
+  }}
+/>
       <Tabs
         activeKey={activeTab}
         items={tabItems}

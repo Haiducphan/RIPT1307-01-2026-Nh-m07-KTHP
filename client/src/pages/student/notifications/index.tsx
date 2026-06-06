@@ -243,9 +243,23 @@ const clearReadNotifications = () => {
             Cập nhật về các đơn mượn và điểm uy tín
           </p>
         </div>
-        <Button disabled={counts.unread === 0} onClick={markAllAsRead}>
-          Đánh dấu đã đọc tất cả
-        </Button>
+        <Space>
+  <Button
+    disabled={counts.unread === 0}
+    onClick={markAllAsRead}
+  >
+    Đánh dấu đã đọc tất cả
+  </Button>
+
+  <Popconfirm
+    title="Xóa tất cả thông báo đã đọc?"
+    onConfirm={clearReadNotifications}
+  >
+    <Button>
+      Xóa đã đọc
+    </Button>
+  </Popconfirm>
+</Space>
       </div>
       <Input.Search
   placeholder="Tìm thông báo..."
@@ -283,8 +297,10 @@ const clearReadNotifications = () => {
               const typeStyle = TYPE_STYLE[item.type];
               return (
                 <List.Item
-                  onClick={() => markAsRead(item.id)}
-                  style={{
+                  onClick={() => {
+                    markAsRead(item.id);
+                    setSelectedNotification(item); }}
+                    style={{
                     cursor: 'pointer',
                     padding: '18px 20px',
                     background: item.isRead ? '#FFFFFF' : '#FBF8F2',
@@ -325,11 +341,29 @@ const clearReadNotifications = () => {
                           <HighlightContent item={item} />
                         </Typography.Paragraph>
                         <Typography.Text style={{ color: '#9A9D98', fontSize: 12 }}>{item.time}</Typography.Text>
+                        <Modal
+                            open={!!selectedNotification}
+                            title={selectedNotification?.title}
+                            footer={null}
+                            onCancel={() => setSelectedNotification(null)}
+                          >
+                            {selectedNotification && (
+                              <>
+                                <p>{selectedNotification.content}</p>
+
+                                <Typography.Text type="secondary">
+                                  {selectedNotification.time}
+                                </Typography.Text>
+                              </>
+                            )}
+                          </Modal>
                       </div>
+                      
                     }
                   />
                   {!item.isRead && <Badge color="#B05A4D" style={{ marginTop: 8 }} />}
                 </List.Item>
+                
               );
             }}
           />

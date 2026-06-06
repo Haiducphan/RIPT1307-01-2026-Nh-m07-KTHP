@@ -225,14 +225,6 @@ export function login(payload: LoginPayload) {
   return apiPost<RawUser>('/auth/login', payload).then(normalizeUser);
 }
 
-function shouldUseDemoFallback(error: unknown) {
-  if (!error || typeof error !== 'object') return false;
-  const response = (error as { response?: { status?: number } }).response;
-  if (!response) return true;
-  const status = Number(response.status);
-  return status === 404 || status >= 500;
-}
-
 function findDemoAccount(payload: LoginPayload) {
   const email = payload.email.trim().toLowerCase();
   return DEMO_ACCOUNTS.find((account) => account.email.toLowerCase() === email && account.password === payload.password);
@@ -243,13 +235,10 @@ export function isDemoAuthUser(user?: User | null) {
 }
 
 export async function loginWithDemoFallback(payload: LoginPayload) {
-  try {
-    return await login(payload);
-  } catch (error) {
-    const demoAccount = shouldUseDemoFallback(error) ? findDemoAccount(payload) : undefined;
-    if (demoAccount) return { ...demoAccount.user };
-    throw error;
-  }
+  const demoAccount = findDemoAccount(payload);
+  if (demoAccount) return { ...demoAccount.user };
+
+  return login(payload);
 }
 
 export function getMe() {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Avatar, Button, Card, Col, Form, Input, Modal, Progress, Row, Table, Tag, Typography, message } from 'antd';
 
 interface TrustHistoryRow {
@@ -102,11 +102,19 @@ function SmallStatCard({ title, value, meta }: { title: string; value: string; m
 
 export default function StudentProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
 
   const handleSaveProfile = () => {
     setEditOpen(false);
     message.success('Đã lưu nháp hồ sơ');
   };
+  const filteredHistory = useMemo(() => {
+  return trustHistory.filter(
+    (item) =>
+      item.action.toLowerCase().includes(searchText.toLowerCase()) ||
+      item.requestCode.toLowerCase().includes(searchText.toLowerCase())
+  );
+}, [searchText]);
 
   return (
     <div style={{ paddingBottom: 48 }}>
@@ -193,7 +201,14 @@ export default function StudentProfilePage() {
             bordered={false}
             style={{ borderRadius: 14, border: '1px solid #E5DECB' }}
             title={<span style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 500 }}>Lịch sử điểm uy tín</span>}
-            extra={<Button>Xem tất cả</Button>}
+            extra={
+  <Input.Search
+    placeholder="Tìm lịch sử..."
+    allowClear
+    style={{ width: 220 }}
+    onChange={(e) => setSearchText(e.target.value)}
+  />
+}
           >
             <Table<TrustHistoryRow>
               rowKey="id"

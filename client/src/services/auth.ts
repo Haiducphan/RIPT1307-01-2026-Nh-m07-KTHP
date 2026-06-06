@@ -230,12 +230,19 @@ function findDemoAccount(payload: LoginPayload) {
   return DEMO_ACCOUNTS.find((account) => account.email.toLowerCase() === email && account.password === payload.password);
 }
 
+export function isDemoLoginEnabled() {
+  if (process.env.UMI_APP_DEMO_MODE === 'true') return true;
+  if (typeof window === 'undefined') return false;
+
+  return window.location.hostname.includes('vercel.app');
+}
+
 export function isDemoAuthUser(user?: User | null) {
   return Boolean(user?.token?.startsWith('demo-token-'));
 }
 
 export async function loginWithDemoFallback(payload: LoginPayload) {
-  const demoAccount = findDemoAccount(payload);
+  const demoAccount = isDemoLoginEnabled() ? findDemoAccount(payload) : undefined;
   if (demoAccount) return { ...demoAccount.user };
 
   return login(payload);

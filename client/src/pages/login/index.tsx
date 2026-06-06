@@ -1,7 +1,7 @@
 import { Button, Checkbox, Col, Form, Input, message, Row, Typography } from 'antd';
 import { history, Link } from 'umi';
 import { ROUTES } from '@/constants/routes';
-import { getMe, login } from '@/services/auth';
+import { getMe, isDemoAuthUser, loginWithDemoFallback } from '@/services/auth';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserRole } from '@/types';
 
@@ -26,8 +26,12 @@ export default function LoginPage() {
 
   const handleSubmit = async (values: LoginFormValues) => {
     try {
-      const user = await login(values);
+      const user = await loginWithDemoFallback(values);
       signIn(user);
+      if (isDemoAuthUser(user)) {
+        history.push(user.role === 'admin' ? ROUTES.adminDashboard : ROUTES.studentDevices);
+        return;
+      }
       const latestUser = await getMe();
       const syncedUser = { ...latestUser, token: user.token };
       signIn(syncedUser);
@@ -202,6 +206,9 @@ export default function LoginPage() {
                 Đăng ký ngay
               </Link>
             </Typography.Text>
+            <Typography.Paragraph style={{ textAlign: 'center', color: '#8A8E88', fontSize: 13, margin: '18px auto 0', maxWidth: 500, lineHeight: 1.55 }}>
+              Bản demo frontend: Admin dùng admin@school.edu.vn / password. Sinh viên dùng phanhaiduc1262006@gmail.com / 120606 hoặc pdd150999@gmail.com / 654321.
+            </Typography.Paragraph>
           </div>
         </Col>
       </Row>

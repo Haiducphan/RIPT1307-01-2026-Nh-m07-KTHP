@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Alert,
@@ -128,6 +128,15 @@ function getRequestCode(request: AdminRequest) {
   const id = String(request.id ?? '');
   const fallbackId = typeof request.id === 'number' ? id.padStart(4, '0') : id;
   return `#REQ-${fallbackId}`;
+}
+function normalizeRequestLookup(value?: string | number | null) {
+  return String(value ?? '').replace(/^#/, '').trim().toLowerCase();
+}
+function requestMatchesQueryId(request: AdminRequest, requestId: string) {
+  const queryValue = normalizeRequestLookup(requestId);
+  const requestCode = normalizeRequestLookup(request.requestCode ?? request.request_code);
+
+  return normalizeRequestLookup(request.id) === queryValue || Boolean(requestCode && requestCode === queryValue);
 }
 function getInitials(name: string) {
   return name
@@ -392,6 +401,7 @@ export default function AdminRequestsPage() {
   const [rankFilter, setRankFilter] = useState<StudentRank | 'all'>('all');
   const [selectedId, setSelectedId] = useState<AdminRequest['id']>();
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const warnedRequestIdRef = useRef<string>();
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [actionKey, setActionKey] = useState<string>();
   const [rejectTarget, setRejectTarget] = useState<AdminRequest>();
@@ -424,6 +434,30 @@ export default function AdminRequestsPage() {
     const unlisten = history.listen(syncQueryState);
     return unlisten;
   }, []);
+
+  useEffect(() => {
+    if (!highlightedRequestId) {
+      warnedRequestIdRef.current = undefined;
+      return;
+    }
+
+    if (loading || !data) return;
+
+    const currentRequests = requests.length ? requests : data.map(toAdminRequest);
+    const matchedRequest = currentRequests.find((request) => requestMatchesQueryId(request, highlightedRequestId));
+    if (matchedRequest) {
+      setSelectedId(matchedRequest.id);
+      setDetailModalOpen(true);
+      warnedRequestIdRef.current = undefined;
+      return;
+    }
+
+    if (warnedRequestIdRef.current !== highlightedRequestId) {
+      message.warning('Không tìm thấy yêu cầu cần xem chi tiết trong danh sách hiện tại.', 3);
+      warnedRequestIdRef.current = highlightedRequestId;
+    }
+  }, [data, highlightedRequestId, loading, requests]);
+
   const keyword = useMemo(() => normalizeText(searchText.trim()), [searchText]);
   const baseFilteredRequests = useMemo(
     () => requests.filter((request) => requestMatchesFilters(request, keyword, dateRange, returnDateRange, rankFilter)),

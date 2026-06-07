@@ -4,8 +4,9 @@ const {
   deleteDevice,
   getDeviceById,
   getDevices,
-  updateDevice
-} = require('../controllers/devices.controller');
+  updateDevice,
+  updateStock
+} = require('../controllers/equipment.controller');
 const {
   authenticateJWT,
   authorizeRole,
@@ -18,6 +19,7 @@ router.get('/', optionalAuthenticateJWT, getDevices);
 router.get('/:id', optionalAuthenticateJWT, getDeviceById);
 router.post('/', authenticateJWT, authorizeRole('admin'), createDevice);
 router.put('/:id', authenticateJWT, authorizeRole('admin'), updateDevice);
+router.patch('/:id/stock', authenticateJWT, authorizeRole('admin'), updateStock);
 router.delete('/:id', authenticateJWT, authorizeRole('admin'), deleteDevice);
 
 module.exports = router;

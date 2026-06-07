@@ -1,5 +1,5 @@
 const { borrowRequests } = require('../models/mockData');
-const deviceService = require('../services/device.service');
+const equipmentService = require('../services/equipment.service');
 
 function getBorrowRequests(_req, res) {
   res.json(borrowRequests);
@@ -13,12 +13,12 @@ function getMyBorrowRequests(req, res) {
 
 async function createBorrowRequest(req, res) {
   try {
-    const device = await deviceService.getDeviceById(req.body.deviceId);
-    if (!device) {
+    const equipment = await equipmentService.getEquipmentById(req.body.deviceId);
+    if (!equipment) {
       return res.status(404).json({ message: 'Device not found' });
     }
 
-    if (device.status !== 'available') {
+    if (equipment.availableQuantity < 1) {
       return res.status(400).json({ message: 'Device is not available for borrowing' });
     }
 
@@ -29,8 +29,8 @@ async function createBorrowRequest(req, res) {
       id: `br${Date.now()}`,
       studentId: String(userId),
       studentName: userName,
-      deviceId: device.id,
-      deviceName: device.name,
+      deviceId: equipment.id,
+      deviceName: equipment.name,
       quantity: Number(req.body.quantity || 1),
       borrowDate: req.body.borrowDate,
       returnDate: req.body.returnDate,
@@ -55,13 +55,13 @@ async function approveBorrowRequest(req, res) {
       return;
     }
 
-    const device = await deviceService.getDeviceById(request.deviceId);
-    if (!device) {
+    const equipment = await equipmentService.getEquipmentById(request.deviceId);
+    if (!equipment) {
       res.status(404).json({ message: 'Device not found' });
       return;
     }
 
-    if (device.availableQuantity < request.quantity) {
+    if (equipment.availableQuantity < request.quantity) {
       res.status(400).json({ message: 'Not enough device quantity' });
       return;
     }

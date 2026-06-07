@@ -1,10 +1,13 @@
 const { Op } = require('sequelize');
-const Equipment = require('../models/equipment.models');
+const Equipment = require('../models/equipment.model');
+const EquipmentImage = require('../models/equipmentImages.model');
+const sequelize = require('../config/database'); 
+const auditLogService = require('./auditLog.service'); 
 
-async function listEquipment({ tier, conditionStatus, page = 1, limit = 12, includeDeleted = false } = {}) {
+// Lấy danh sách thiết bị
+async function listEquipment({ tier, conditionStatus, page = 1, limit = 12, includeInactive = false } = {}) {
   const where = {};
-
-  if (!includeDeleted) where.isDeleted = false;
+  if (!includeInactive) where.isActive = true; 
   if (tier) where.tier = tier;
   if (conditionStatus) where.conditionStatus = conditionStatus;
 
@@ -12,6 +15,7 @@ async function listEquipment({ tier, conditionStatus, page = 1, limit = 12, incl
 
   const { count, rows } = await Equipment.findAndCountAll({
     where,
+    include: ['images'],
     order: [['created_at', 'DESC']],
     limit: Number(limit),
     offset
@@ -25,87 +29,210 @@ async function listEquipment({ tier, conditionStatus, page = 1, limit = 12, incl
   };
 }
 
+// Lấy thiết bị theo ID
 async function getEquipmentById(id, { includeDeleted = false } = {}) {
   const where = { id };
-  if (!includeDeleted) where.isDeleted = false;
-  return Equipment.findOne({ where });
-}
+  if (!includeDeleted) where.isActive = true;
 
-async function createEquipment(payload) {
-  const { code, name, categoryId, tier, conditionStatus, totalQuantity, description, createdBy } = payload;
-
-  if (!code || !name || !categoryId || !tier) {
-    const err = new Error('Thiếu trường bắt buộc: code, name, categoryId, tier');
-    err.status = 400;
-    throw err;
-  }
-
-  return Equipment.create({
-    code,
-    name,
-    categoryId,
-    tier,
-    conditionStatus: conditionStatus || 'good',
-    totalQuantity: totalQuantity || 0,
-    availableQuantity: totalQuantity || 0,
-    borrowingQuantity: 0,
-    brokenQuantity: 0,
-    description,
-    createdBy
+  return Equipment.findOne({ 
+    where,
+    include: ['images']
   });
 }
 
-async function updateEquipment(id, payload) {
-  const equipment = await Equipment.findOne({ where: { id, isDeleted: false } });
-  if (!equipment) return null;
-  return equipment.update(payload);
+// Tạo thiết bị mới kèm ảnh
+async function createEquipment(payload, files) {
+  if (!payload.code || !payload.name || !payload.categoryId || !payload.tier) {
+    throw { status: 400, message: 'Thiếu trường bắt buộc: code, name, categoryId, tier' };
+  }
+
+  // Kiểm tra trùng mã thiết bị (Lỗi 409)
+  const existing = await Equipment.findOne({ where: { code: payload.code } });
+  if (existing) {
+    const statusText = existing.isActive ? 'Đang hoạt động' : 'Đã bị ẩn/Ngưng sử dụng';
+    throw { 
+      status: 409, 
+      message: `Mã thiết bị ${payload.code} đã tồn tại (Trạng thái: ${statusText}). Vui lòng chọn mã khác hoặc khôi phục thiết bị cũ.` 
+    };
+  }
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    const equipment = await Equipment.create({
+      code: payload.code,
+      name: payload.name,
+      categoryId: payload.categoryId,
+      tier: payload.tier,
+      conditionStatus: payload.conditionStatus || 'good',
+      totalQuantity: payload.totalQuantity || 0,
+      availableQuantity: payload.totalQuantity || 0,
+      borrowingQuantity: 0,
+      brokenQuantity: 0,
+      description: payload.description,
+      createdBy: payload.createdBy
+    }, { transaction });
+
+    // Xử lý lưu ảnh
+    if (files && files.length > 0) {
+      const imageData = files.map((file, index) => ({
+        equipmentId: equipment.id,
+        imageUrl: `/uploads/equipment/${file.filename}`, 
+        isPrimary: index === 0 ? true : false,
+        sortOrder: index
+      }));
+      await EquipmentImage.bulkCreate(imageData, { transaction });
+    }
+
+    // Ghi Log lịch sử
+    await auditLogService.logAdminAction({
+      userId: payload.createdBy,
+      action: 'create_equipment',
+      entityType: 'equipment',
+      entityId: equipment.id,
+      newValue: { code: equipment.code, name: equipment.name, total: equipment.totalQuantity }
+    }, transaction);
+
+    await transaction.commit();
+
+    return await Equipment.findByPk(equipment.id, { include: ['images'] });
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 }
 
-async function softDeleteEquipment(id) {
-  const equipment = await Equipment.findOne({ where: { id, isDeleted: false } });
-  if (!equipment) return null;
-  return equipment.update({ isDeleted: true });
+// Cập nhật thiết bị
+async function updateEquipment(id, payload, files, adminId) {
+  // Lấy cả thiết bị đang active và inactive để cho phép sửa cả khi đang ẩn
+  const equipment = await Equipment.findOne({ where: { id } });
+  if (!equipment) throw { status: 404, message: 'Không tìm thấy thiết bị' };
+
+  // Kiểm tra trùng mã
+  if (payload.code && payload.code !== equipment.code) {
+    const existing = await Equipment.findOne({ where: { code: payload.code } });
+    if (existing) {
+      const statusText = existing.isActive ? 'Đang hoạt động' : 'Đã bị ẩn/Ngưng sử dụng';
+      throw { 
+        status: 409, 
+        message: `Mã thiết bị ${payload.code} đã tồn tại ở thiết bị khác (Trạng thái: ${statusText}).` 
+      };
+    }
+  }
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    const oldData = { ...equipment.toJSON() };
+
+    await equipment.update({
+      code: payload.code !== undefined ? payload.code : equipment.code,
+      name: payload.name !== undefined ? payload.name : equipment.name,
+      categoryId: payload.categoryId !== undefined ? payload.categoryId : equipment.categoryId,
+      tier: payload.tier !== undefined ? payload.tier : equipment.tier,
+      conditionStatus: payload.conditionStatus !== undefined ? payload.conditionStatus : equipment.conditionStatus,
+      description: payload.description !== undefined ? payload.description : equipment.description,
+    }, { transaction });
+
+    // Xử lý ảnh mới
+    if (files && files.length > 0) {
+      const currentImagesCount = await EquipmentImage.count({ where: { equipmentId: id }, transaction });
+      const imageData = files.map((file, index) => ({
+        equipmentId: id,
+        imageUrl: `/uploads/equipment/${file.filename}`, 
+        isPrimary: (currentImagesCount === 0 && index === 0) ? true : false, 
+        sortOrder: currentImagesCount + index
+      }));
+      await EquipmentImage.bulkCreate(imageData, { transaction });
+    }
+
+    // Xử lý ảnh bị xóa (FE truyền lên mảng id các ảnh muốn xoá)
+    if (payload.deletedImageIds) {
+      let idsToDelete = typeof payload.deletedImageIds === 'string' ? payload.deletedImageIds.split(',') : payload.deletedImageIds;
+      if (idsToDelete.length > 0) {
+        await EquipmentImage.destroy({ where: { id: idsToDelete, equipmentId: id }, transaction });
+      }
+    }
+
+    await auditLogService.logAdminAction({
+      userId: adminId,
+      action: 'update_equipment',
+      entityType: 'equipment',
+      entityId: id,
+      oldValue: { code: oldData.code, name: oldData.name, tier: oldData.tier },
+      newValue: { code: equipment.code, name: equipment.name, tier: equipment.tier }
+    }, transaction);
+
+    await transaction.commit();
+    return getEquipmentById(id, { includeDeleted: true });
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 }
 
-async function updateStock(id, { totalQuantity, availableQuantity }) {
-  const equipment = await Equipment.findOne({ where: { id, isDeleted: false } });
-  if (!equipment) {
-    const err = new Error('Thiet bi khong ton tai');
-    err.status = 404;
-    throw err;
-  }
+// Bật/Tắt (Khôi phục) thiết bị
+async function toggleEquipmentStatus(id, adminId) {
+  const equipment = await Equipment.findByPk(id);
+  if (!equipment) throw { status: 404, message: 'Không tìm thấy thiết bị' };
 
-  if (totalQuantity !== undefined && totalQuantity < 0) {
-    const err = new Error('Tong so luong khong duoc am');
-    err.status = 400;
-    throw err;
-  }
+  const newStatus = !equipment.isActive;
+  await equipment.update({ isActive: newStatus });
 
-  if (availableQuantity !== undefined && availableQuantity < 0) {
-    const err = new Error('So luong con lai khong duoc am');
-    err.status = 400;
-    throw err;
-  }
-
-  if (availableQuantity !== undefined && totalQuantity !== undefined && availableQuantity > totalQuantity) {
-    const err = new Error('So luong con lai khong duoc lon hon tong so luong');
-    err.status = 400;
-    throw err;
-  }
-
-  await equipment.update({
-    ...(totalQuantity !== undefined && { totalQuantity }),
-    ...(availableQuantity !== undefined && { availableQuantity })
+  await auditLogService.logAdminAction({
+    userId: adminId,
+    action: newStatus ? 'restore_equipment' : 'deactivate_equipment',
+    entityType: 'equipment',
+    entityId: id,
+    oldValue: { isActive: !newStatus },
+    newValue: { isActive: newStatus }
   });
 
   return equipment;
 }
 
+// Xoá mềm thiết bị
+async function softDeleteEquipment(id, adminId) {
+  return toggleEquipmentStatus(id, adminId);
+}
+
+// Cập nhật kho thủ công
+async function updateStock(id, { totalQuantity }, adminId) {
+  const equipment = await Equipment.findOne({ where: { id, isActive: true } });
+  if (!equipment) throw { status: 404, message: 'Thiết bị không tồn tại hoặc đang bị ẩn' };
+  if (totalQuantity !== undefined && totalQuantity < 0) throw { status: 400, message: 'Tổng số lượng không được âm' };
+
+  if (totalQuantity !== undefined) {
+    const currentBorrowing = equipment.borrowingQuantity || 0;
+    const currentBroken = equipment.brokenQuantity || 0;
+    const newAvailableQuantity = totalQuantity - currentBorrowing - currentBroken;
+
+    if (newAvailableQuantity < 0) {
+      throw { status: 400, message: `Không thể giảm vì đang có ${currentBorrowing} máy được mượn và ${currentBroken} máy hỏng.` };
+    }
+
+    const oldTotal = equipment.totalQuantity;
+    await equipment.update({ totalQuantity, availableQuantity: newAvailableQuantity });
+
+    await auditLogService.logAdminAction({
+      userId: adminId,
+      action: 'update_stock',
+      entityType: 'equipment',
+      entityId: id,
+      oldValue: { totalQuantity: oldTotal },
+      newValue: { totalQuantity }
+    });
+  }
+
+  return equipment;
+}
+
 module.exports = {
-  listEquipment,
-  getEquipmentById,
-  createEquipment,
-  updateEquipment,
-  softDeleteEquipment,
-  updateStock
+  listEquipment, 
+  getEquipmentById, 
+  createEquipment, 
+  updateEquipment, 
+  softDeleteEquipment, 
+  toggleEquipmentStatus,
+  updateStock,
 };

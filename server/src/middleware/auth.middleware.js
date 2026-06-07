@@ -1,9 +1,7 @@
-//kiểm tra token/vai trò
-
 const jwt = require('jsonwebtoken');
-
 const JWT_SECRET = process.env.JWT_SECRET || 'borrow-equipment-secret';
 
+// Xác thực cứng
 function authenticateJWT(req, res, next) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   if (!authHeader) {
@@ -25,6 +23,7 @@ function authenticateJWT(req, res, next) {
   }
 }
 
+// Xác thực mềm
 function optionalAuthenticateJWT(req, _res, next) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   if (!authHeader) {
@@ -39,11 +38,11 @@ function optionalAuthenticateJWT(req, _res, next) {
   try {
     req.user = jwt.verify(parts[1], JWT_SECRET);
   } catch (_err) {
-    // ignore invalid token for optional auth
   }
   next();
 }
 
+// Xác thực vai trò
 function authorizeRole(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user) {

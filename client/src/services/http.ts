@@ -1,5 +1,43 @@
-import axios, { isAxiosError } from 'axios';
-const API_BASE_URL = process.env.UMI_APP_API_BASE_URL || '/api';
+import axios from 'axios';
+
+const API_BASE_URL = process.env.API_BASE_URL || '/api';
+const AUTH_STORAGE_KEYS = ['borrow_equipment_user', 'auth-storage', 'user'];
+
+type StoredRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): StoredRecord | undefined {
+  return value !== null && typeof value === 'object' ? (value as StoredRecord) : undefined;
+}
+
+function getTokenFromStoredValue(value: unknown) {
+  const parsed = asRecord(value);
+  const state = asRecord(parsed?.state);
+  const currentUser = asRecord(parsed?.currentUser);
+  const stateCurrentUser = asRecord(state?.currentUser);
+  const user = asRecord(parsed?.user);
+  const candidates = [parsed?.token, stateCurrentUser?.token, currentUser?.token, user?.token];
+
+  return candidates.find((token): token is string => typeof token === 'string' && token.length > 0);
+}
+
+function getStoredToken() {
+  if (typeof window === 'undefined') return undefined;
+
+  for (const key of AUTH_STORAGE_KEYS) {
+    const storedValue = window.localStorage.getItem(key);
+    if (!storedValue) continue;
+
+    try {
+      const token = getTokenFromStoredValue(JSON.parse(storedValue) as unknown);
+      if (token) return token;
+    } catch {
+      // Ignore malformed legacy storage values and check the next supported key.
+    }
+  }
+
+  return undefined;
+}
+
 const http = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -7,57 +45,56 @@ const http = axios.create({
   }
 });
 
-// Attach Authorization header from stored user token (if available)
 http.interceptors.request.use((config) => {
-  try {
-    const raw = localStorage.getItem('borrow_equipment_user');
-    if (raw) {
-      const user = JSON.parse(raw);
-      if (user?.token) {
-        config.headers = config.headers || {};
-        config.headers.Authorization = `Bearer ${user.token}`;
-      }
-    }
-  } catch (e) {
-    // ignore
+  const token = getStoredToken();
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
-<<<<<<< HEAD
-export function getErrorMessage(error: unknown, fallback: string) {
-  if (isAxiosError(error)) {
-    const data = error.response?.data as { message?: string } | undefined;
-    if (data?.message) {
-      return data.message;
-    }
-    if (error.response?.status === 404) {
-      return 'Khong tim thay du lieu';
-    }
-    if (!error.response) {
-      return 'Khong ket noi duoc server. Hay chay backend (port 4000).';
-    }
-    return error.message || fallback;
-  }
-  return fallback;
-}
-
 export function apiGet<T>(url: string) {
   return http.get<T>(url).then((response) => response.data);
-=======
-export function apiGet<T>(url: string, config?: { params?: Record<string, unknown> }) {
-  return http.get<T>(url, config).then((response) => response.data);
->>>>>>> feature/borrow-request-be1
 }
+
 export function apiPost<T>(url: string, data?: unknown) {
   return http.post<T>(url, data).then((response) => response.data);
 }
+
+export function apiPostForm<T>(url: string, data: FormData) {
+  return http
+    .post<T>(url, data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    .then((response) => response.data);
+}
+
 export function apiPatch<T>(url: string, data?: unknown) {
   return http.patch<T>(url, data).then((response) => response.data);
 }
+
+export function apiPatchForm<T>(url: string, data: FormData) {
+  return http
+    .patch<T>(url, data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    .then((response) => response.data);
+}
+
 export function apiPut<T>(url: string, data?: unknown) {
   return http.put<T>(url, data).then((response) => response.data);
 }
+
+export function apiPutForm<T>(url: string, data: FormData) {
+  return http
+    .put<T>(url, data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    .then((response) => response.data);
+}
+
 export function apiDelete<T>(url: string) {
   return http.delete<T>(url).then((response) => response.data);
 }

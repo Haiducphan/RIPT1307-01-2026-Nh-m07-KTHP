@@ -1,34 +1,318 @@
-import { Button, Card, Select, Space, Table, Tag } from 'antd';
-import { useEffect, useState } from 'react';
-import PageTitle from '@/components/PageTitle';
-import { getDevices } from '@/services/equipment';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, Col, Empty, Grid, Input, Row, Skeleton } from 'antd';
+import { history } from 'umi';
+import EquipmentCard from '@/components/EquipmentCard';
+import StatsCard from '@/components/StatsCard';
+import TrustRankBadge from '@/components/TrustRankBadge';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import { getMyBorrowRequests } from '@/services/borrowRequests';
+import type { NormalizedBorrowRequest } from '@/services/borrowRequests';
+import { getDevices } from '@/services/devices';
+import { useAuthStore } from '@/stores/authStore';
 import type { Device } from '@/types';
+import type { BorrowStatus } from '@/types';
+
+type TrustRankValue = 'diamond' | 'gold' | 'silver' | 'bronze' | 'stone';
+type DeviceTier = 'S' | 'A' | 'B' | 'C';
+type DisplayDevice = Device & {
+  icon?: string;
+  tier?: DeviceTier;
+};
+
+const ALL_FILTER = 'Tất cả';
+const IN_STOCK_FILTER = 'Còn hàng';
+const ACTIVE_BORROW_STATUSES: BorrowStatus[] = ['borrowed', 'borrowing', 'overdue'];
+const RETURNED_STATUSES: BorrowStatus[] = ['returned', 'returned_ontime', 'returned_late'];
+
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+}
+
+function getDisplayName(fullName?: string) {
+  const name = fullName?.trim();
+  return name || 'bạn';
+}
+
+function getDeviceIcon(device: Device) {
+  const text = normalizeText(`${device.name} ${device.category}`);
+
+  if (text.includes('micro')) return '🎤';
+  if (text.includes('loa') || text.includes('am thanh')) return '🔊';
+  if (text.includes('may chieu') || text.includes('trinh chieu')) return '📽️';
+  if (text.includes('may anh') || text.includes('camera') || text.includes('canon') || text.includes('sony')) return '📷';
+  if (text.includes('tripod') || text.includes('chan may')) return '🎬';
+  if (text.includes('den') || text.includes('led')) return '💡';
+  if (text.includes('tai nghe')) return '🎧';
+  if (text.includes('mixer')) return '🎚️';
+  return '📦';
+}
+
+function getDeviceTier(device: Device): DeviceTier {
+  if (device.tier === 'S' || device.tier === 'A' || device.tier === 'B' || device.tier === 'C') return device.tier;
+
+  const text = normalizeText(`${device.name} ${device.category}`);
+
+  if (text.includes('epson') || text.includes('canon') || text.includes('may chieu')) return 'S';
+  if (text.includes('shure') || text.includes('jbl') || text.includes('mixer') || text.includes('micro')) return 'A';
+  if (text.includes('tripod') || text.includes('den') || text.includes('loa')) return 'B';
+  return 'C';
+}
+
+function getDeviceDescription(device: Device) {
+  if (device.description?.trim()) return device.description;
+
+  const text = normalizeText(`${device.name} ${device.category}`);
+
+  if (text.includes('micro')) return 'Micro chuyên dụng cho sự kiện và thuyết trình';
+  if (text.includes('loa')) return 'Loa di động phục vụ sinh hoạt câu lạc bộ';
+  if (text.includes('may chieu') || text.includes('trinh chieu')) return 'Thiết bị trình chiếu cho họp nhóm và workshop';
+  if (text.includes('may anh') || text.includes('camera')) return 'Thiết bị ghi hình cho truyền thông và sự kiện';
+  if (text.includes('tripod') || text.includes('chan may')) return 'Phụ kiện hỗ trợ quay chụp ổn định';
+  if (text.includes('den') || text.includes('led')) return 'Đèn hỗ trợ quay chụp trong không gian trong nhà';
+  if (text.includes('tai nghe')) return 'Tai nghe kiểm âm, dựng video và luyện tập';
+  return 'Thiết bị sẵn sàng cho sinh viên đăng ký mượn';
+}
+
+function matchFilter(device: Device, filter: string) {
+  if (filter === ALL_FILTER) return true;
+  if (filter === IN_STOCK_FILTER) return device.availableQuantity > 0;
+  return normalizeText(device.category) === normalizeText(filter);
+}
+
+function getRequestTime(request: NormalizedBorrowRequest) {
+  return new Date(request.createdAt || request.returnDate || request.borrowDate || 0).getTime();
+}
+
+function calculateGoodReturnStreak(requests: NormalizedBorrowRequest[]) {
+  const completedRequests = [...requests]
+    .filter((request) => RETURNED_STATUSES.includes(request.status))
+    .sort((first, second) => getRequestTime(second) - getRequestTime(first));
+
+  let streak = 0;
+  for (const request of completedRequests) {
+    if (request.status !== 'returned_ontime' && request.status !== 'returned') break;
+    streak += 1;
+  }
+
+  return streak;
+}
 
 export default function StudentDevicesPage() {
-  const [tier, setTier] = useState<string | undefined>();
-  const [conditionStatus, setConditionStatus] = useState<string | undefined>();
-  const [page, setPage] = useState(1);
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const pageSize = 10;
+  const { currentUser } = useAuthStore();
+  const screens = Grid.useBreakpoint();
+  const isMobile = !screens.md;
+  const { data: devices = [], loading } = useAsyncData(getDevices);
+  const { data: myRequests = [] } = useAsyncData(getMyBorrowRequests);
+  const [searchText, setSearchText] = useState('');
+  const [activeFilter, setActiveFilter] = useState(ALL_FILTER);
 
-  const fetchDevices = async (t: string | undefined, c: string | undefined, p: number) => {
-    setLoading(true);
-    try {
-      const res = await getDevices({ tier: t, conditionStatus: c, page: p, limit: pageSize });
-      setDevices(res.data);
-      setTotal(res.total);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const userMeta = currentUser as (typeof currentUser & {
+    trustScore?: number;
+    trustRank?: TrustRankValue;
+    goodReturnStreak?: number;
+  });
+
+  const displayDevices = useMemo<DisplayDevice[]>(
+    () =>
+      devices.map((device) => ({
+        ...device,
+        icon: getDeviceIcon(device),
+        tier: getDeviceTier(device),
+        description: getDeviceDescription(device)
+      })),
+    [devices]
+  );
+
+  const filterOptions = useMemo(() => {
+    const categories = Array.from(
+      new Set(displayDevices.map((device) => device.category?.trim()).filter((category): category is string => Boolean(category)))
+    ).sort((first, second) => first.localeCompare(second, 'vi'));
+
+    return [ALL_FILTER, ...categories, IN_STOCK_FILTER];
+  }, [displayDevices]);
 
   useEffect(() => {
-    void fetchDevices(tier, conditionStatus, page);
-  }, []);
+    if (!filterOptions.includes(activeFilter)) setActiveFilter(ALL_FILTER);
+  }, [activeFilter, filterOptions]);
 
-  const handleSearch = () => {
-    setPage(1);
-    void fetchDevices(tier, conditionStatus, 1);
+  const availableCount = useMemo(
+    () => displayDevices.filter((device) => device.availableQuantity > 0).length,
+    [displayDevices]
+  );
+
+  const filteredDevices = useMemo(() => {
+    const keyword = normalizeText(searchText.trim());
+
+    return displayDevices.filter((device) => {
+      const searchableText = normalizeText(`${device.name} ${device.category} ${device.description ?? ''}`);
+      const matchesSearch = !keyword || searchableText.includes(keyword);
+      return matchesSearch && matchFilter(device, activeFilter);
+    });
+  }, [activeFilter, displayDevices, searchText]);
+
+  const studentStats = useMemo(() => {
+    const borrowing = myRequests
+      .filter((request) => ACTIVE_BORROW_STATUSES.includes(request.status))
+      .reduce((total, request) => total + request.quantity, 0);
+    const pending = myRequests.filter((request) => request.status === 'pending').length;
+    const returned = myRequests.filter((request) => RETURNED_STATUSES.includes(request.status)).length;
+    const streak = typeof userMeta?.goodReturnStreak === 'number' ? userMeta.goodReturnStreak : calculateGoodReturnStreak(myRequests);
+
+    return { borrowing, pending, returned, streak };
+  }, [myRequests, userMeta?.goodReturnStreak]);
+
+  const handleBorrow = (device: Device) => {
+    history.push(`/student/borrow?deviceId=${device.id}`);
   };
+
+  return (
+    <div style={{ paddingBottom: 48, maxWidth: 1280, width: '100%' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'flex-start' : 'flex-end',
+          gap: 24,
+          marginBottom: 32,
+          flexWrap: 'wrap'
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontFamily: 'var(--app-heading-font)',
+              fontSize: 34,
+              fontWeight: 500,
+              lineHeight: 1.1,
+              color: '#1A1F1B',
+              margin: '0 0 8px'
+            }}
+          >
+            Xin chào,{' '}
+            <span style={{ color: '#2D4A3E', fontStyle: 'normal', letterSpacing: 0, wordBreak: 'normal', whiteSpace: 'normal' }}>
+              {getDisplayName(currentUser?.fullName)}
+            </span>
+          </h1>
+          <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+            Có {availableCount} thiết bị đang sẵn sàng cho bạn mượn hôm nay.
+          </p>
+        </div>
+
+        <TrustRankBadge rank={userMeta?.trustRank ?? 'stone'} score={userMeta?.trustScore ?? 0} />
+      </div>
+
+      <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
+        <Col xs={24} md={12} xl={6}>
+          <StatsCard title="ĐANG MƯỢN" value={studentStats.borrowing} meta="thiết bị" />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <StatsCard title="CHỜ DUYỆT" value={studentStats.pending} meta="yêu cầu" />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <StatsCard title="ĐÃ TỪNG MƯỢN" value={studentStats.returned} meta="lượt thành công" />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <StatsCard title="CHUỖI TỐT" value={studentStats.streak} meta="lần trả tốt liên tiếp" featured />
+        </Col>
+      </Row>
+
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          marginBottom: 28
+        }}
+      >
+        <Input.Search
+          allowClear
+          placeholder="Tìm thiết bị: micro, máy chiếu, máy ảnh..."
+          value={searchText}
+          onChange={(event) => setSearchText(event.target.value)}
+          style={{ width: 360, maxWidth: '100%' }}
+        />
+
+        {filterOptions.map((filter) => {
+          const active = activeFilter === filter;
+
+          return (
+            <Button
+              key={filter}
+              type={active ? 'primary' : 'default'}
+              onClick={() => setActiveFilter(filter)}
+              style={{
+                borderRadius: 100,
+                height: 36,
+                paddingInline: 16,
+                background: active ? '#2D4A3E' : '#FFFFFF',
+                borderColor: active ? '#2D4A3E' : '#E5DECB',
+                color: active ? '#FFFFFF' : '#1A1F1B'
+              }}
+            >
+              {filter}
+            </Button>
+          );
+        })}
+      </div>
+
+      {loading ? (
+        <Row gutter={[18, 18]}>
+          {Array.from({ length: 8 }, (_, index) => (
+            <Col key={index} xs={24} sm={12} md={8} lg={6}>
+              <div
+                style={{
+                  borderRadius: 16,
+                  border: '1px solid #E5DECB',
+                  background: '#FFFFFF',
+                  padding: 18
+                }}
+              >
+                <Skeleton.Image active style={{ width: '100%', height: 150, borderRadius: 12 }} />
+                <Skeleton active paragraph={{ rows: 2 }} title={{ width: '70%' }} style={{ marginTop: 16 }} />
+                <Skeleton.Button active block style={{ height: 40, borderRadius: 10 }} />
+              </div>
+            </Col>
+          ))}
+        </Row>
+      ) : filteredDevices.length === 0 ? (
+        <Empty
+          image={<div style={{ fontSize: 60 }}>🔍</div>}
+          styles={{ image: { height: 80, marginBottom: 16 } }}
+          description={
+            <div>
+              <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Không tìm thấy thiết bị nào</h3>
+              <p style={{ color: '#6B6F6C', fontSize: 14, margin: 0 }}>
+                Thử thay đổi từ khoá tìm kiếm hoặc bộ lọc khác
+              </p>
+            </div>
+          }
+          style={{ padding: '70px 0' }}
+        >
+          <Button
+            onClick={() => {
+              setSearchText('');
+              setActiveFilter(ALL_FILTER);
+            }}
+          >
+            Xoá bộ lọc
+          </Button>
+        </Empty>
+      ) : (
+        <Row gutter={[18, 18]}>
+          {filteredDevices.map((device) => (
+            <Col key={device.id} xs={24} sm={12} md={8} lg={6}>
+              <EquipmentCard device={device} onBorrow={handleBorrow} />
+            </Col>
+          ))}
+        </Row>
+      )}
+    </div>
+  );
+}

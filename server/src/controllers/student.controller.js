@@ -1,50 +1,129 @@
 const studentService = require('../services/student.service');
 
-async function adjustTrustScore(req, res) {
+// Phục hồi / Cộng (hoặc Trừ) điểm uy tín thủ công
+async function restoreTrustScore(req, res) {
   try {
-    const { delta, note } = req.body;
+    const studentId = req.params.id;
+    const { pointsToAdd, reason } = req.body;
+    const adminId = req.user.id;
 
-    if (delta === undefined) {
-      return res.status(400).json({ message: 'Thieu truong delta' });
+    if (pointsToAdd === undefined || isNaN(parseInt(pointsToAdd))) {
+      return res.status(400).json({ message: 'Vui lòng nhập số điểm hợp lệ (pointsToAdd)' });
     }
 
-    const result = await studentService.adjustTrustScore(
-      req.params.id,
-      Number(delta),
-      req.user.id,
-      note
+    const result = await studentService.restoreTrustScoreService(
+      studentId, 
+      parseInt(pointsToAdd), 
+      reason, 
+      adminId
     );
 
-    res.json(result);
+    return res.json({ 
+      message: 'Cập nhật điểm uy tín sinh viên thành công', 
+      newScore: result.newScore, 
+      newRank: result.newRank 
+    });
   } catch (error) {
-    if (error.status === 400 || error.status === 404) {
-      return res.status(error.status).json({ message: error.message });
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('restoreTrustScore error:', error.message);
+    return res.status(500).json({ message: 'Lỗi hệ thống khi cập nhật điểm uy tín' });
+  }
+}
+
+// Khoá / Mở khoá mượn đồ thủ công
+async function toggleManualLock(req, res) {
+  try {
+    const studentId = req.params.id;
+    const { isLocked, lockDays, isPermanent, reason } = req.body;
+
+    if (isLocked === undefined) {
+      return res.status(400).json({ message: 'Vui lòng cung cấp trạng thái đóng/mở khoá (isLocked)' });
     }
-    console.error('adjustTrustScore error:', error.message);
-    res.status(500).json({ message: 'Failed to adjust trust score' });
-  }
-}
 
-async function lockBorrow(req, res) {
-  try {
-    const result = await studentService.setBorrowLock(req.params.id, true);
-    res.json(result);
+    const updatedStudent = await studentService.toggleManualLockService(studentId, { 
+      isLocked, 
+      lockDays, 
+      isPermanent, 
+      reason 
+    });
+    
+    const successMessage = isLocked === false 
+      ? 'Đã mở khoá tính năng mượn đồ thành công' 
+      : 'Đã khoá tính năng mượn đồ thành công';
+
+    return res.json({ message: successMessage, student: updatedStudent });
   } catch (error) {
-    if (error.status === 404) return res.status(404).json({ message: error.message });
-    console.error('lockBorrow error:', error.message);
-    res.status(500).json({ message: 'Failed to lock' });
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('toggleManualLock error:', error.message);
+    return res.status(500).json({ message: 'Lỗi hệ thống khi xử lý khoá tài khoản' });
   }
 }
 
-async function unlockBorrow(req, res) {
+// Lấy danh sách sinh viên
+async function getStudents(req, res) {
   try {
-    const result = await studentService.setBorrowLock(req.params.id, false);
-    res.json(result);
+    const { page, limit, search } = req.query;
+    const result = await studentService.getStudentsService({ page, limit, search });
+    return res.json(result);
   } catch (error) {
-    if (error.status === 404) return res.status(404).json({ message: error.message });
-    console.error('unlockBorrow error:', error.message);
-    res.status(500).json({ message: 'Failed to unlock' });
+    console.error('getStudents error:', error.message);
+    return res.status(500).json({ message: 'Lỗi hệ thống khi tải danh sách sinh viên' });
   }
 }
 
-module.exports = { adjustTrustScore, lockBorrow, unlockBorrow };
+// Xem chi tiết lịch sử điểm uy tín
+async function getTrustScoreLogs(req, res) {
+  try {
+    const studentId = req.params.id;
+    const logs = await studentService.getTrustScoreLogsService(studentId);
+    return res.json({ message: 'Thành công', data: logs });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('getTrustScoreLogs error:', error.message);
+    return res.status(500).json({ message: 'Lỗi hệ thống khi tải lịch sử điểm' });
+  }
+}
+
+// Sinh viên xem lịch sử biến động điểm uy tín của chính mình
+async function getMyTrustScoreLogs(req, res) {
+  try {
+    const logs = await studentService.getMyTrustScoreLogsService(req.user.id);
+    return res.json({ message: 'Thành công', data: logs });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('getMyTrustScoreLogs error:', error.message);
+    return res.status(500).json({ message: 'Lỗi hệ thống khi tải lịch sử điểm' });
+  }
+}
+
+// Cập nhật ảnh đại diện cho sinh viên
+async function updateMyAvatar(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Vui lòng chọn một bức ảnh để tải lên' });
+    }
+
+    const fileUrl = `/uploads/avatars/${req.file.filename}`;
+    const userId = req.user.id;
+
+    const updatedStudent = await studentService.updateAvatarService(userId, fileUrl);
+    
+    return res.json({ 
+      message: 'Cập nhật ảnh đại diện thành công', 
+      avatarUrl: updatedStudent.avatarUrl 
+    });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('Lỗi cập nhật avatar:', error.message);
+    return res.status(500).json({ message: 'Lỗi hệ thống khi cập nhật ảnh đại diện' });
+  }
+}
+
+module.exports = { 
+  restoreTrustScore, 
+  toggleManualLock,
+  getStudents,
+  getTrustScoreLogs,
+  getMyTrustScoreLogs,
+  updateMyAvatar, 
+};

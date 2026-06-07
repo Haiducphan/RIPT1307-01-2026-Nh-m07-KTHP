@@ -17,40 +17,12 @@ const users = [
   }
 ];
 
-const devices = [
-  {
-    id: 'd1',
-    name: 'May chieu',
-    category: 'Thiet bi trinh chieu',
-    totalQuantity: 5,
-    availableQuantity: 3,
-    status: 'available',
-    description: 'Dung cho phong hoc va su kien cau lac bo'
-  },
-  {
-    id: 'd2',
-    name: 'Micro khong day',
-    category: 'Am thanh',
-    totalQuantity: 10,
-    availableQuantity: 6,
-    status: 'available'
-  },
-  {
-    id: 'd3',
-    name: 'Loa keo',
-    category: 'Am thanh',
-    totalQuantity: 2,
-    availableQuantity: 1,
-    status: 'available'
-  }
-];
-
 const borrowRequests = [
   {
     id: 'br1',
     studentId: 'u1',
     studentName: 'Nguyen Van A',
-    deviceId: 'd1',
+    deviceId: '1',
     deviceName: 'May chieu',
     quantity: 1,
     borrowDate: '2026-05-12',
@@ -62,7 +34,7 @@ const borrowRequests = [
     id: 'br2',
     studentId: 'u1',
     studentName: 'Nguyen Van A',
-    deviceId: 'd2',
+    deviceId: '2',
     deviceName: 'Micro khong day',
     quantity: 2,
     borrowDate: '2026-05-01',
@@ -73,6 +45,5 @@ const borrowRequests = [
 
 module.exports = {
   users,
-  devices,
   borrowRequests
 };

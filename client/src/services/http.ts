@@ -1,7 +1,5 @@
 import axios, { isAxiosError } from 'axios';
-
 const API_BASE_URL = process.env.UMI_APP_API_BASE_URL || '/api';
-
 const http = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -9,16 +7,18 @@ const http = axios.create({
   }
 });
 
+// Attach Authorization header from stored user token (if available)
 http.interceptors.request.use((config) => {
   try {
     const raw = localStorage.getItem('borrow_equipment_user');
     if (raw) {
-      const user = JSON.parse(raw) as { token?: string };
-      if (user.token) {
+      const user = JSON.parse(raw);
+      if (user?.token) {
+        config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${user.token}`;
       }
     }
-  } catch {
+  } catch (e) {
     // ignore
   }
   return config;
@@ -44,19 +44,15 @@ export function getErrorMessage(error: unknown, fallback: string) {
 export function apiGet<T>(url: string) {
   return http.get<T>(url).then((response) => response.data);
 }
-
 export function apiPost<T>(url: string, data?: unknown) {
   return http.post<T>(url, data).then((response) => response.data);
 }
-
 export function apiPatch<T>(url: string, data?: unknown) {
   return http.patch<T>(url, data).then((response) => response.data);
 }
-
 export function apiPut<T>(url: string, data?: unknown) {
   return http.put<T>(url, data).then((response) => response.data);
 }
-
 export function apiDelete<T>(url: string) {
   return http.delete<T>(url).then((response) => response.data);
 }

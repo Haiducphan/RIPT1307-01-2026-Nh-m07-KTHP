@@ -51,6 +51,7 @@ interface AdminRequest extends Omit<BorrowRequest, 'id' | 'status'> {
   returnNote?: string;
 }
 interface RejectFormValues {
+  reasonTemplate?: string;
   reason: string;
   note?: string;
 }
@@ -504,8 +505,13 @@ export default function AdminRequestsPage() {
   const handleReject = async (values: RejectFormValues) => {
     if (!rejectTarget) return;
 
-    const reasonLabel = REJECT_REASONS.find((item) => item.value === values.reason)?.label ?? values.reason;
-    const finalReason = values.note?.trim() ? `${reasonLabel}. ${values.note.trim()}` : reasonLabel;
+    const reason = String(values.reason ?? '').trim();
+    if (!reason) {
+      message.error('Vui lòng nhập lý do từ chối.', 3);
+      return;
+    }
+
+    const finalReason = values.note?.trim() ? `${reason}. ${values.note.trim()}` : reason;
     const success = await runAction('reject', rejectTarget, () => rejectBorrowRequest(String(rejectTarget.id), finalReason), 'Đã từ chối đơn');
     if (success) {
       setRejectTarget(undefined);
@@ -1040,28 +1046,31 @@ export default function AdminRequestsPage() {
           style={{ marginBottom: 16, borderRadius: 12 }}
         />
         <Form<RejectFormValues> form={rejectForm} layout="vertical" onFinish={handleReject}>
-          <Form.Item name="reason" label="Lý do từ chối" rules={[{ required: true, message: 'Chọn lý do từ chối' }]}>
+          <Form.Item name="reasonTemplate" label="Lý do gợi ý">
             <Select
-              placeholder="Chọn lý do"
+              allowClear
+              placeholder="Chọn nhanh lý do nếu phù hợp"
               options={REJECT_REASONS.map((reason) => ({ value: reason.value, label: reason.label }))}
+              onChange={(value) => {
+                const label = REJECT_REASONS.find((reason) => reason.value === value)?.label;
+                if (label) rejectForm.setFieldValue('reason', label);
+              }}
             />
+          </Form.Item>
+          <Form.Item
+            name="reason"
+            label="Lý do từ chối"
+            rules={[
+              { required: true, whitespace: true, message: 'Vui lòng nhập lý do từ chối.' }
+            ]}
+          >
+            <Input.TextArea rows={4} placeholder="Nhập lý do cụ thể để sinh viên hiểu vì sao yêu cầu bị từ chối..." />
           </Form.Item>
           <Form.Item
             name="note"
             label="Ghi chú thêm"
-            dependencies={['reason']}
-            rules={[
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (getFieldValue('reason') !== 'other' || String(value ?? '').trim()) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('Nhập ghi chú khi chọn lý do Khác'));
-                }
-              })
-            ]}
           >
-            <Input.TextArea rows={3} placeholder="Giải thích chi tiết để sinh viên hiểu..." />
+            <Input.TextArea rows={3} placeholder="Bổ sung ngữ cảnh xử lý nếu cần..." />
           </Form.Item>
         </Form>
       </Modal>

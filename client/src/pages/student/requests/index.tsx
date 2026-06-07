@@ -8,6 +8,7 @@ import type { BorrowRequest } from '@/types';
 
 export default function StudentRequestsPage() {
   const { data, loading } = useAsyncData(getMyBorrowRequests);
+  const requests = data?.data ?? [];
 
   return (
     <>
@@ -16,9 +17,9 @@ export default function StudentRequestsPage() {
         <Table<BorrowRequest>
           rowKey="id"
           loading={loading}
-          dataSource={data || []}
+          dataSource={requests}
           columns={[
-            { title: 'Thiet bi', dataIndex: 'deviceName' },
+            { title: 'Ma don', dataIndex: 'requestCode' },
             { title: 'So luong', dataIndex: 'quantity' },
             { title: 'Ngay muon', dataIndex: 'borrowDate', render: formatDate },
             { title: 'Ngay tra', dataIndex: 'returnDate', render: formatDate },

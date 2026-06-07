@@ -2,6 +2,8 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const express = require('express');
+require('./models/associations');
+
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
@@ -35,3 +37,4 @@ syncDatabase()
     console.error('Database sync failed:', error.message);
     process.exit(1);
   });
+console.log('DB name:', process.env.DB_NAME);

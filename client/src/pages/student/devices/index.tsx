@@ -1,38 +1,34 @@
-import { Card, Table, Tag } from 'antd';
-import DeviceStatusTag from '@/components/DeviceStatusTag';
+import { Button, Card, Select, Space, Table, Tag } from 'antd';
+import { useEffect, useState } from 'react';
 import PageTitle from '@/components/PageTitle';
-import { useAsyncData } from '@/hooks/useAsyncData';
 import { getDevices } from '@/services/equipment';
 import type { Device } from '@/types';
 
 export default function StudentDevicesPage() {
-  const { data, loading } = useAsyncData(getDevices);
-  const devices = data?.data ?? [];
-  return (
-    <>
-      <PageTitle title="Danh sach thiet bi" description="Sinh vien xem tinh trang va so luong con lai." />
-      <Card>
-        <Table<Device>
-          rowKey="id"
-          loading={loading}
-          dataSource={devices}
-          columns={[
-            { title: 'Ten thiet bi', dataIndex: 'name' },
-            { title: 'Ma', dataIndex: 'code' },
-            { title: 'Hang', dataIndex: 'tier' },
-            { title: 'Tong so', dataIndex: 'totalQuantity' },
-            { title: 'Con lai', dataIndex: 'availableQuantity' },
-            { title: 'Dang muon', dataIndex: 'borrowingQuantity' },
-            {
-              title: 'Tinh trang',
-              dataIndex: 'conditionStatus',
-              render: (val: string) => (
-                <Tag color={val === 'good' ? 'green' : val === 'fair' ? 'orange' : 'red'}>{val}</Tag>
-              )
-            }
-          ]}
-        />
-      </Card>
-    </>
-  );
-}
+  const [tier, setTier] = useState<string | undefined>();
+  const [conditionStatus, setConditionStatus] = useState<string | undefined>();
+  const [page, setPage] = useState(1);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const pageSize = 10;
+
+  const fetchDevices = async (t: string | undefined, c: string | undefined, p: number) => {
+    setLoading(true);
+    try {
+      const res = await getDevices({ tier: t, conditionStatus: c, page: p, limit: pageSize });
+      setDevices(res.data);
+      setTotal(res.total);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchDevices(tier, conditionStatus, page);
+  }, []);
+
+  const handleSearch = () => {
+    setPage(1);
+    void fetchDevices(tier, conditionStatus, 1);
+  };

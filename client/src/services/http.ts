@@ -24,6 +24,7 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
+<<<<<<< HEAD
 export function getErrorMessage(error: unknown, fallback: string) {
   if (isAxiosError(error)) {
     const data = error.response?.data as { message?: string } | undefined;
@@ -43,6 +44,10 @@ export function getErrorMessage(error: unknown, fallback: string) {
 
 export function apiGet<T>(url: string) {
   return http.get<T>(url).then((response) => response.data);
+=======
+export function apiGet<T>(url: string, config?: { params?: Record<string, unknown> }) {
+  return http.get<T>(url, config).then((response) => response.data);
+>>>>>>> feature/borrow-request-be1
 }
 export function apiPost<T>(url: string, data?: unknown) {
   return http.post<T>(url, data).then((response) => response.data);

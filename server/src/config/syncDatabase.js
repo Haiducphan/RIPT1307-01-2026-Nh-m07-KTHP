@@ -2,7 +2,7 @@ const sequelize = require('./database');
 const { DataTypes } = require('sequelize');
 
 // Require tất cả các Model của hệ thống
-const User = require('../models/user.model');
+const User = require('../models/user.models');
 const Admin = require('../models/admin.model');
 const Student = require('../models/student.model');
 const Category = require('../models/category.model');

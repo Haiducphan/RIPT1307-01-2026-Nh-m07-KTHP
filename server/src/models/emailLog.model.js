@@ -1,6 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
-const User = require('./user.model');
+const User = require('./user.models');
 const BorrowRequest = require('./borrowRequest.model');
 
 const EmailLog = sequelize.define('EmailLog', {

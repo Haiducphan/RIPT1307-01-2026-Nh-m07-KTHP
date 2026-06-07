@@ -1,5 +1,5 @@
 const Student = require('../models/student.model');
-const User = require('../models/user.model');
+const User = require('../models/user.models');
 const TrustScoreLog = require('../models/trustScoreLog.model');
 const BorrowRequest = require('../models/borrowRequest.model');
 const { calculateRank } = require('../utils/trustScore.util');

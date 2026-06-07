@@ -32,7 +32,7 @@ const Student = sequelize.define('Student', {
   
 });
 
-const User = require('./user.model');
+const User = require('./user.models');
 // Thiết lập mối quan hệ
 Student.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 

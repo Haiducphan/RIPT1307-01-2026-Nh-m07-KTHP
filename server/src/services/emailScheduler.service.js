@@ -9,7 +9,6 @@ function startEmailScheduler() {
     await sendReturnReminders();
     await sendOverdueWarnings();
   });
-
   console.log('[Scheduler] Email scheduler started');
 }
 
@@ -27,7 +26,6 @@ async function sendReturnReminders() {
           AND DATE(created_at) = CURDATE()
       )
   `);
-
   for (const req of requests) {
     await sendEmail({
       userId: req.student_id,
@@ -41,7 +39,6 @@ async function sendReturnReminders() {
       }
     });
   }
-
   console.log(`[Scheduler] Sent ${requests.length} return reminders`);
 }
 
@@ -60,7 +57,6 @@ async function sendOverdueWarnings() {
           AND DATE(created_at) = CURDATE()
       )
   `);
-
   for (const req of requests) {
     await sendEmail({
       userId: req.student_id,
@@ -74,7 +70,6 @@ async function sendOverdueWarnings() {
       }
     });
   }
-
   if (requests.length > 0) {
     const admins = await User.findAll({ where: { role: 'admin' } });
     for (const admin of admins) {
@@ -91,7 +86,6 @@ async function sendOverdueWarnings() {
       });
     }
   }
-
   console.log(`[Scheduler] Sent ${requests.length} overdue warnings`);
 }
 

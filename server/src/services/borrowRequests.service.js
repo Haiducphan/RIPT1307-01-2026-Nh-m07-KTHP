@@ -1,5 +1,5 @@
 ﻿const { Op } = require('sequelize');
-const BorrowRequest = require('../models/borrowRequest.model');
+const BorrowRequest = require('../models/borrowRequests.models');
 const Equipment = require('../models/equipment.models');
 const User = require('../models/user.models');
 const Student = require('../models/student.model');
@@ -92,6 +92,23 @@ async function listBorrowRequests({ userId, studentId, status, page = 1, limit =
   });
 
   return { total: count, page: Number(page), totalPages: Math.ceil(count / limit), data: rows };
+}
+
+async function handoverBorrowRequest(id, adminId) {
+  const request = await BorrowRequest.findOne({ where: { id, status: 'approved' } });
+  if (!request) {
+    const err = new Error('Khong tim thay don hoac don chua duoc duyet');
+    err.status = 404;
+    throw err;
+  }
+
+  await request.update({
+    status: 'borrowing',
+    handedOverAt: new Date(),
+    handedOverBy: adminId
+  });
+
+  return request;
 }
 
 async function returnBorrowRequest(id, adminId, returnCondition) {
@@ -193,6 +210,7 @@ async function rejectBorrowRequestService(id, adminId, reason) {
 module.exports = {
   createBorrowRequest,
   listBorrowRequests,
+  handoverBorrowRequest,
   returnBorrowRequest,
   approveBorrowRequestService,
   rejectBorrowRequestService

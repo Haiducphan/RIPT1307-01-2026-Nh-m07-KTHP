@@ -12,7 +12,6 @@ async function getBorrowRequests(req, res) {
 }
 
 async function getMyBorrowRequests(req, res) {
-  console.log('user id:', req.user.id);
   try {
     const userId = req.user?.id ?? req.user?.userId;
     if (!userId) return res.status(401).json({ message: 'Unauthenticated' });
@@ -61,17 +60,36 @@ async function createBorrowRequest(req, res) {
 
 async function approveBorrowRequest(req, res) {
   try {
-    const request = await borrowRequestService.handoverBorrowRequest(req.params.id, req.user.id);
+    const request = await borrowRequestService.approveBorrowRequestService(req.params.id, req.user.id);
     res.json(request);
   } catch (error) {
     if (error.status === 404) return res.status(404).json({ message: error.message });
     console.error('approveBorrowRequest error:', error.message);
-    res.status(500).json({ message: 'Failed to handover' });
+    res.status(500).json({ message: 'Failed to approve borrow request' });
   }
 }
 
 async function rejectBorrowRequest(req, res) {
-  res.status(501).json({ message: 'Chua implement' });
+  try {
+    const { reason } = req.body;
+    const request = await borrowRequestService.rejectBorrowRequestService(req.params.id, req.user.id, reason);
+    res.json(request);
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ message: error.message });
+    console.error('rejectBorrowRequest error:', error.message);
+    res.status(500).json({ message: 'Failed to reject borrow request' });
+  }
+}
+
+async function handoverBorrowRequest(req, res) {
+  try {
+    const request = await borrowRequestService.handoverBorrowRequest(req.params.id, req.user.id);
+    res.json(request);
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ message: error.message });
+    console.error('handoverBorrowRequest error:', error.message);
+    res.status(500).json({ message: 'Failed to handover' });
+  }
 }
 
 async function markReturned(req, res) {
@@ -92,5 +110,6 @@ module.exports = {
   createBorrowRequest,
   approveBorrowRequest,
   rejectBorrowRequest,
+  handoverBorrowRequest,
   markReturned
 };

@@ -272,7 +272,7 @@ export function isDemoLoginEnabled() {
 }
 
 export function isDemoAuthUser(user?: User | null) {
-  return Boolean(user?.token?.startsWith(DEMO_TOKEN_PREFIX));
+  return isDemoLoginEnabled() && Boolean(user?.token?.startsWith(DEMO_TOKEN_PREFIX));
 }
 
 export function getDemoLoginHint() {

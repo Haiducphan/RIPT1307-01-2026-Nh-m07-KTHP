@@ -1,7 +1,7 @@
 import { Button, Checkbox, Col, Form, Input, message, Row, Typography } from 'antd';
 import { history, Link } from 'umi';
 import { ROUTES } from '@/constants/routes';
-import { getDemoLoginHint, getMe, isDemoAuthUser, loginWithDemoFallback } from '@/services/auth';
+import { getMe, login } from '@/services/auth';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserRole } from '@/types';
 
@@ -23,16 +23,11 @@ function getErrorMessage(error: unknown, fallback: string) {
 export default function LoginPage() {
   const [form] = Form.useForm<LoginFormValues>();
   const signIn = useAuthStore((state) => state.signIn);
-  const demoHint = getDemoLoginHint();
 
   const handleSubmit = async (values: LoginFormValues) => {
     try {
-      const user = await loginWithDemoFallback(values);
+      const user = await login(values);
       signIn(user);
-      if (isDemoAuthUser(user)) {
-        history.push(user.role === 'admin' ? ROUTES.adminDashboard : ROUTES.studentDevices);
-        return;
-      }
       const latestUser = await getMe();
       const syncedUser = { ...latestUser, token: user.token };
       signIn(syncedUser);
@@ -207,11 +202,6 @@ export default function LoginPage() {
                 Đăng ký ngay
               </Link>
             </Typography.Text>
-            {demoHint ? (
-              <Typography.Paragraph style={{ textAlign: 'center', color: '#8A8E88', fontSize: 13, margin: '18px auto 0', maxWidth: 500, lineHeight: 1.55 }}>
-                {demoHint}
-              </Typography.Paragraph>
-            ) : null}
           </div>
         </Col>
       </Row>

@@ -9,6 +9,12 @@ const DEFAULT_TEMPLATES = {
   }
 };
 
+const SMTP_TIMEOUT_OPTIONS = {
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000
+};
+
 function getMailConfig() {
   const user = process.env.MAIL_USER || process.env.SMTP_USER || process.env.EMAIL_USER;
   const pass = process.env.MAIL_PASSWORD || process.env.SMTP_PASS || process.env.EMAIL_PASS;
@@ -27,13 +33,15 @@ function createTransporter() {
       host,
       port,
       secure: port === 465,
-      auth
+      auth,
+      ...SMTP_TIMEOUT_OPTIONS
     });
   }
 
   return nodemailer.createTransport({
     service: 'gmail',
-    auth
+    auth,
+    ...SMTP_TIMEOUT_OPTIONS
   });
 }
 

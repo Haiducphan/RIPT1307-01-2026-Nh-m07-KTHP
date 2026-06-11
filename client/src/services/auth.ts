@@ -1,7 +1,7 @@
 import { apiGet, apiPatchForm, apiPost } from './http';
 import type { User, UserRole } from '@/types';
 
-const REACT_APP_API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
+const API_BASE_URL = process.env.UMI_APP_API_BASE_URL || '/api';
 
 export interface LoginPayload {
   email: string;
@@ -95,6 +95,7 @@ type RawUser = Partial<User> & {
 interface DemoAccount {
   email: string;
   password: string;
+  label: string;
   user: User;
 }
 
@@ -103,66 +104,102 @@ interface MeResponse {
   data?: RawUser;
 }
 
-// FE-only demo fallback for deployments where the backend/database is not online yet.
-const DEMO_ACCOUNTS: DemoAccount[] = [
-  {
-    email: 'admin@school.edu.vn',
-    password: 'password',
+const DEMO_TOKEN_PREFIX = 'demo-token-';
+
+function normalizeEnvValue(value?: string) {
+  return value?.trim();
+}
+
+function createDemoAccount({
+  email,
+  password,
+  role,
+  index,
+  name,
+  studentCode,
+  className,
+  trustScore,
+  trustRank
+}: {
+  email?: string;
+  password?: string;
+  role: UserRole;
+  index: number;
+  name?: string;
+  studentCode?: string;
+  className?: string;
+  trustScore?: number;
+  trustRank?: string;
+}): DemoAccount | undefined {
+  if (!email || !password) return undefined;
+
+  const fallbackName = role === 'admin' ? 'Admin Demo' : `Sinh viên Demo ${index}`;
+  const fullName = name || fallbackName;
+
+  return {
+    email,
+    password,
+    label: `${role === 'admin' ? 'Admin' : `Sinh viên ${index}`} dùng ${email} / ${password}`,
     user: {
-      id: 'demo-admin',
-      fullName: 'Admin Demo',
-      name: 'Admin Demo',
-      email: 'admin@school.edu.vn',
+      id: `demo-${role}-${index}`,
+      studentId: role === 'student' ? `demo-student-${index}` : undefined,
+      fullName,
+      name: fullName,
+      email,
+      role,
+      studentCode: role === 'student' ? studentCode || `DEMO${String(index).padStart(3, '0')}` : undefined,
+      className: role === 'student' ? className || 'Demo' : undefined,
+      token: `${DEMO_TOKEN_PREFIX}${role}-${index}`,
+      trustScore: role === 'student' ? trustScore : undefined,
+      trustRank: role === 'student' ? trustRank : undefined,
+      goodReturnStreak: role === 'student' ? 0 : undefined,
+      borrowLocked: role === 'student' ? false : undefined,
+      isPermanentlyLocked: role === 'student' ? false : undefined
+    }
+  };
+}
+
+// FE-only demo fallback. It is disabled by default and only uses accounts provided through UMI_APP_DEMO_* env vars.
+function getDemoAccounts() {
+  if (!isDemoLoginEnabled()) return [];
+
+  return [
+    createDemoAccount({
       role: 'admin',
-      token: 'demo-token-admin'
-    }
-  },
-  {
-    email: 'phanhaiduc1262006@gmail.com',
-    password: '120606',
-    user: {
-      id: 'demo-student-1',
-      studentId: 'demo-student-1',
-      fullName: 'Phan Hải Đức',
-      name: 'Phan Hải Đức',
-      email: 'phanhaiduc1262006@gmail.com',
+      index: 1,
+      email: normalizeEnvValue(process.env.UMI_APP_DEMO_ADMIN_EMAIL),
+      password: normalizeEnvValue(process.env.UMI_APP_DEMO_ADMIN_PASSWORD),
+      name: normalizeEnvValue(process.env.UMI_APP_DEMO_ADMIN_NAME)
+    }),
+    createDemoAccount({
       role: 'student',
-      studentCode: 'DEMO001',
-      className: 'Demo',
-      token: 'demo-token-student',
-      trustScore: 100,
-      trustRank: 'diamond',
-      goodReturnStreak: 0,
-      borrowLocked: false,
-      isPermanentlyLocked: false
-    }
-  },
-  {
-    email: 'pdd150999@gmail.com',
-    password: '654321',
-    user: {
-      id: 'demo-student-2',
-      studentId: 'demo-student-2',
-      fullName: 'Sinh viên Demo',
-      name: 'Sinh viên Demo',
-      email: 'pdd150999@gmail.com',
+      index: 1,
+      email: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT1_EMAIL),
+      password: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT1_PASSWORD),
+      name: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT1_NAME),
+      studentCode: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT1_CODE),
+      className: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT1_CLASS),
+      trustScore: Number(normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT1_TRUST_SCORE) || 100),
+      trustRank: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT1_TRUST_RANK) || 'diamond'
+    }),
+    createDemoAccount({
       role: 'student',
-      studentCode: 'DEMO002',
-      className: 'Demo',
-      token: 'demo-token-student',
-      trustScore: 88,
-      trustRank: 'gold',
-      goodReturnStreak: 0,
-      borrowLocked: false,
-      isPermanentlyLocked: false
-    }
-  }
-];
+      index: 2,
+      email: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT2_EMAIL),
+      password: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT2_PASSWORD),
+      name: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT2_NAME),
+      studentCode: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT2_CODE),
+      className: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT2_CLASS),
+      trustScore: Number(normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT2_TRUST_SCORE) || 88),
+      trustRank: normalizeEnvValue(process.env.UMI_APP_DEMO_STUDENT2_TRUST_RANK) || 'gold'
+    })
+  ].filter((account): account is DemoAccount => Boolean(account));
+}
 
 function getApiOrigin() {
-  if (REACT_APP_API_BASE_URL.startsWith('http://') || REACT_APP_API_BASE_URL.startsWith('https://')) {
+  if (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://')) {
     try {
-      return new URL(REACT_APP_API_BASE_URL).origin;
+      return new URL(API_BASE_URL).origin;
     } catch {
       return '';
     }
@@ -227,18 +264,22 @@ export function login(payload: LoginPayload) {
 
 function findDemoAccount(payload: LoginPayload) {
   const email = payload.email.trim().toLowerCase();
-  return DEMO_ACCOUNTS.find((account) => account.email.toLowerCase() === email && account.password === payload.password);
+  return getDemoAccounts().find((account) => account.email.toLowerCase() === email && account.password === payload.password);
 }
 
 export function isDemoLoginEnabled() {
-  if (process.env.UMI_APP_DEMO_MODE === 'true') return true;
-  if (typeof window === 'undefined') return false;
-
-  return window.location.hostname.includes('vercel.app');
+  return process.env.UMI_APP_DEMO_MODE === 'true';
 }
 
 export function isDemoAuthUser(user?: User | null) {
-  return Boolean(user?.token?.startsWith('demo-token-'));
+  return Boolean(user?.token?.startsWith(DEMO_TOKEN_PREFIX));
+}
+
+export function getDemoLoginHint() {
+  const demoAccounts = getDemoAccounts();
+  if (demoAccounts.length === 0) return '';
+
+  return `Bản demo frontend: ${demoAccounts.map((account) => account.label).join('. ')}.`;
 }
 
 export async function loginWithDemoFallback(payload: LoginPayload) {

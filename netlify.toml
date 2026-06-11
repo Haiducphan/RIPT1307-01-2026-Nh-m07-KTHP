@@ -5,7 +5,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  UMI_APP_DEMO_MODE = "true"
+  UMI_APP_DEMO_MODE = "false"
 
 [[redirects]]
   from = "/*"

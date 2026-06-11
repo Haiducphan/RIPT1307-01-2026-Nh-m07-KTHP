@@ -4,6 +4,8 @@ const { Sequelize } = require('sequelize');
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+const useDatabaseSsl = process.env.DB_SSL === 'true';
+
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'clubborrow',
   process.env.DB_USER || 'root',
@@ -26,7 +28,7 @@ const sequelize = new Sequelize(
       timezone: '+07:00',
       dateStrings: true,
       typeCast: true,
-      ssl: { require: true, rejectUnauthorized: false },
+      ...(useDatabaseSsl ? { ssl: { require: true, rejectUnauthorized: false } } : {}),
     },
   }
 );

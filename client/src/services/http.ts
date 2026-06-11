@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const REACT_APP_API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
+const API_BASE_URL = process.env.UMI_APP_API_BASE_URL || '/api';
 const AUTH_STORAGE_KEYS = ['borrow_equipment_user', 'auth-storage', 'user'];
 
 type StoredRecord = Record<string, unknown>;
@@ -39,7 +39,7 @@ function getStoredToken() {
 }
 
 const http = axios.create({
-  baseURL: REACT_APP_API_BASE_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json'
   }

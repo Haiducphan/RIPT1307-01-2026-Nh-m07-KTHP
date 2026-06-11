@@ -1,7 +1,7 @@
 import { apiGet, apiPatchForm, apiPost } from './http';
 import type { User, UserRole } from '@/types';
 
-const API_BASE_URL = process.env.API_BASE_URL || '/api';
+const REACT_APP_API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 
 export interface LoginPayload {
   email: string;
@@ -160,9 +160,9 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
 ];
 
 function getApiOrigin() {
-  if (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://')) {
+  if (REACT_APP_API_BASE_URL.startsWith('http://') || REACT_APP_API_BASE_URL.startsWith('https://')) {
     try {
-      return new URL(API_BASE_URL).origin;
+      return new URL(REACT_APP_API_BASE_URL).origin;
     } catch {
       return '';
     }

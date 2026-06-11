@@ -55,7 +55,7 @@ const CATEGORY_BY_ID: Record<number, string> = {
 };
 
 function getApiOrigin() {
-  const apiBaseUrl = process.env.API_BASE_URL || '/api';
+  const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || '/api';
   if (apiBaseUrl.startsWith('http://') || apiBaseUrl.startsWith('https://')) {
     try {
       return new URL(apiBaseUrl).origin;
